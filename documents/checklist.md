@@ -6,17 +6,17 @@ This checklist breaks down the development process into focused phases with clea
 
 **Goal: Establish working data layer and basic API**
 
-- [ ] Create Firebase project in Google Cloud Console
-- [ ] Enable Firestore database with proper region selection
-- [ ] Set up Firebase Authentication with email/password method only
-- [ ] Configure Firebase Local Emulator for development
-- [ ] Initialize local Firebase CLI development environment
-- [ ] Set up version control repository (GitHub/GitLab)
-- [ ] Define Firestore schema for items collection
-- [ ] Define Firestore schema for users collection
-- [ ] Implement basic security rules for data access
-- [ ] Create test items in Firestore to verify schema
-- [ ] Implement user authentication endpoints (register/login)
+- [x] Create Firebase project in Google Cloud Console
+- [x] Enable Firestore database with proper region selection
+- [x] Set up Firebase Authentication with email/password method only
+- [x] Configure Firebase Local Emulator for development
+- [x] Initialize local Firebase CLI development environment
+- [x] Set up version control repository (GitHub/GitLab)
+- [x] Define Firestore schema for items collection
+- [x] Define Firestore schema for users collection
+- [x] Implement basic security rules for data access
+- [x] Create test items in Firestore to verify schema
+- [x] Implement user authentication endpoints (register/login)
 - [ ] Build core item CRUD endpoints in Firebase Functions
 - [ ] Write basic validation logic for all inputs
 - [ ] Test API endpoints using Postman or similar tool
@@ -113,7 +113,7 @@ This checklist breaks down the development process into focused phases with clea
 
 1. **Use the Firebase Local Emulator Suite** during development to:
    - Work offline
-   - Avoid consuming cloud resources/quotas 
+   - Avoid consuming cloud resources/quotas
    - Speed up development cycles
    - Reset data easily during testing
 

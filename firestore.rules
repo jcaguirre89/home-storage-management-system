@@ -2,8 +2,56 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if false;
+
+    // Helper function to get user's data (including householdId)
+    function getUserData(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data;
     }
+
+    // Default: Deny all access unless explicitly allowed.
+    // Users must be authenticated for any operation.
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Users collection:
+    match /users/{userId} {
+      allow read, update: if request.auth.uid == userId;
+      allow create: if request.auth.uid == userId &&
+                          (request.resource.data.householdId == null || request.resource.data.householdId is string);
+    }
+
+    // Items collection:
+    match /items/{itemId} {
+      allow read: if request.auth != null &&
+                       (resource.data.isPrivate == true && request.auth.uid == resource.data.creatorUserId) ||
+                       (resource.data.isPrivate == false && getUserData(request.auth.uid).householdId == resource.data.householdId);
+
+      allow create: if request.auth != null &&
+                       request.resource.data.creatorUserId == request.auth.uid &&
+                       request.resource.data.householdId == getUserData(request.auth.uid).householdId &&
+                       request.resource.data.isPrivate is bool; // Ensure isPrivate is explicitly set
+
+      allow update: if request.auth != null &&
+                       // Check ownership/household membership
+                       ((resource.data.isPrivate == true && request.auth.uid == resource.data.creatorUserId) ||
+                        (resource.data.isPrivate == false && getUserData(request.auth.uid).householdId == resource.data.householdId)) &&
+                       // Prevent changing critical fields like creator or household on update
+                       request.resource.data.creatorUserId == resource.data.creatorUserId &&
+                       request.resource.data.householdId == resource.data.householdId;
+
+      allow delete: if request.auth != null &&
+                       (resource.data.isPrivate == true && request.auth.uid == resource.data.creatorUserId) ||
+                       (resource.data.isPrivate == false && getUserData(request.auth.uid).householdId == resource.data.householdId);
+    }
+
+    // Households collection (example rules - uncomment and adapt if Households collection is actively managed via client):
+    // match /households/{householdId} {
+    //   // Allow members to read their household document
+    //   allow read: if request.auth != null && getUserData(request.auth.uid).householdId == householdId;
+    //   // Allow owner to update (e.g., add/remove members from memberUserIds array)
+    //   // This rule would need careful consideration for what fields can be updated.
+    //   allow write: if request.auth != null && request.auth.uid == resource.data.ownerUserId;
+    // }
   }
 }

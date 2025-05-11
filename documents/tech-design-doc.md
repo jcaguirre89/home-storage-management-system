@@ -55,6 +55,9 @@ This document describes the technical architecture for a smart home storage trac
       "name": "Microphone Stand",
       "location": "A2",
       "status": "STORED",
+      "creatorUserId": "firebase_auth_uid_of_user_who_added_item",
+      "householdId": "household_id_this_item_belongs_to",
+      "isPrivate": false,
       "lastUpdated": "2025-05-10T15:30:00Z",
       "metadata": {
         "category": "Music Equipment",
@@ -71,9 +74,27 @@ This document describes the technical architecture for a smart home storage trac
   "users": {
     "{userId}": {
       "email": "user@example.com",
-      "passwordHash": "[hashed password]",
+      "householdId": "household_id_the_user_belongs_to",
+      "displayName": "User's Display Name",
       "created": "2025-05-08T12:00:00Z",
       "lastLogin": "2025-05-10T15:00:00Z"
+    }
+  }
+}
+```
+
+#### Households Collection
+```json
+{
+  "households": {
+    "{householdId}": {
+      "name": "The Example Household",
+      "ownerUserId": "firebase_auth_uid_of_household_owner",
+      "memberUserIds": [
+        "firebase_auth_uid_member1",
+        "firebase_auth_uid_member2"
+      ],
+      "created": "2025-05-07T10:00:00Z"
     }
   }
 }
@@ -90,7 +111,6 @@ This document describes the technical architecture for a smart home storage trac
 
 #### Authentication
 - `POST /auth/register` - Create new user account
-- `POST /auth/login` - Authenticate user and return JWT
 - `POST /auth/resetPassword` - Password reset flow
 
 #### Items Management
@@ -186,6 +206,10 @@ src/
 │   │   ├── ItemForm.svelte
 │   │   ├── ItemCard.svelte
 │   │   └── BulkImport.svelte
+│   ├── Household/
+│   │   ├── HouseholdSetup.svelte
+│   │   ├── HouseholdMembers.svelte
+│   │   └── HouseholdSettings.svelte
 │   └── Layout/
 │       ├── Header.svelte
 │       ├── Footer.svelte
@@ -195,12 +219,16 @@ src/
 │   ├── login.svelte
 │   ├── register.svelte
 │   ├── dashboard.svelte
-│   └── items/
+│   ├── items/
+│   │   ├── index.svelte
+│   │   └── [id].svelte
+│   └── household/
 │       ├── index.svelte
-│       └── [id].svelte
+│       └── setup.svelte
 ├── stores/
 │   ├── auth.js
-│   └── items.js
+│   ├── items.js
+│   └── household.js
 ├── services/
 │   ├── api.js
 │   └── firebase.js
@@ -211,54 +239,127 @@ src/
 
 #### Dashboard View
 - Storage grid visualization (A1-D4)
-- Item count by location
-- Recently added/removed items
-- Quick search field
+- Item count by location (for items visible to the user within their household)
+- Recently added/removed items (household-specific)
+- Quick search field (searches within accessible household items)
 
 #### Items Management View
-- Sortable/filterable table of all items
+- Sortable/filterable table of all items accessible to the user (respecting household and `isPrivate` flag)
 - Status indicators (stored/out)
-- Edit/Delete actions
-- Add new item form
-- Bulk import button
+- Visual indicator for `isPrivate` items
+- Edit/Delete actions (conditional based on ownership/permissions)
+- Add new item form:
+    - Includes a toggle or checkbox for `isPrivate`
+    - `householdId` and `creatorUserId` are set automatically based on the logged-in user
+- Bulk import button (imported items will be associated with the user's current household and can have a default `isPrivate` status or a column in CSV)
 
 #### Item Detail View
-- Item information
+- Item information, including its `isPrivate` status
 - Location history
 - Metadata editor
 - Storage status toggle
+- Edit/Delete controls are conditional based on user's permissions (creator of private item, or member of household for public items)
+
+#### User Profile/Settings View (Implied - to be added if not already planned)
+- Manage user display name
+- View current `householdId`
+- Option to leave household (might require backend logic for cleanup or ownership transfer if owner)
+
+#### Household Management View (New Section)
+- **Household Setup/Join Page (`routes/household/setup.svelte`):**
+    - Prompts new users (or users not yet in a household) to create a new household or enter an invite code/ID to join an existing one
+- **Main Household Page (`routes/household/index.svelte`):
+    - `HouseholdSettings.svelte` component:
+        - Allows household owner to change household name
+        - Displays household ID (potentially for inviting others)
+    - `HouseholdMembers.svelte` component:
+        - Lists members of the current household
+        - If user is owner, allows removing members (requires backend logic)
+        - If user is owner, potentially an option to generate invite codes/links (requires backend logic)
 
 ## 7. Security Implementation
 
 ### 7.1 Authentication Flow
 
-1. User enters email/password on login screen
-2. Credentials sent to Firebase Auth service
-3. Firebase validates credentials and returns JWT
-4. JWT stored in browser localStorage/sessionStorage
-5. JWT included in Authorization header for all API requests
+1. User enters email/password on the client-side login screen (web or mobile app).
+2. The client application uses the Firebase Authentication SDK (e.g., `signInWithEmailAndPassword` for JavaScript) to send credentials directly to Firebase Auth service.
+3. Firebase validates credentials and returns a JWT (ID Token) and a Refresh Token directly to the client.
+4. The client securely stores the JWT (e.g., in memory, or using Firebase SDK's persistence options). For web, `localStorage` or `sessionStorage` can be used, but SDK persistence is often preferred.
+5. The JWT (ID Token) is included in the Authorization header (e.g., `Bearer <ID_TOKEN>`) for all API requests to your backend Firebase Functions that require authentication.
 
 ### 7.2 Authorization Rules
+
+Firestore security rules will be updated to support household-level access and private items. The core logic will be:
+
+- Users must be authenticated to access any data.
+- Users can manage their own user document in the `users` collection.
+- For items in the `items` collection:
+    - If an item has `isPrivate` set to `true`, only the `creatorUserId` of that item can read, update, or delete it.
+    - If an item has `isPrivate` set to `false`, any user belonging to the same `householdId` as the item can read, update, or delete it.
+    - When creating an item, the `creatorUserId` will be the authenticated user's UID, and the `householdId` will be copied from the user's profile.
+- The `households` collection might have rules allowing members to read their household document, and owners/admins to manage it.
+
+A more detailed ruleset will be implemented in `firestore.rules`.
+
+**Google Assistant and Service Account Access:**
+Interactions via Google Assistant are processed by Firebase Functions, which utilize a Firebase service account. This service account has elevated privileges and is not subject to the same `request.auth.uid`-based security rules that apply to end-users interacting via the web UI. The Firebase Functions themselves will contain the logic to determine data access and modification rights for voice commands, effectively acting as a trusted backend service.
 
 Firestore security rules:
 
 ```
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Only authenticated users can access the app
+
+    // Helper function to get user's data (including householdId)
+    function getUserData(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data;
+    }
+
+    // Default: Deny all access unless explicitly allowed.
+    // Users must be authenticated for any operation.
     match /{document=**} {
       allow read, write: if request.auth != null;
     }
-    
-    // Items can only be accessed by their owner
-    match /items/{itemId} {
-      allow read, write: if request.auth.uid == resource.data.userId;
-    }
-    
-    // User profiles are protected
+
+    // Users collection:
     match /users/{userId} {
-      allow read, write: if request.auth.uid == userId;
+      allow read, update: if request.auth.uid == userId;
+      // Allow user to create their own profile. householdId is optional.
+      allow create: if request.auth.uid == userId &&
+                       (request.resource.data.householdId == null || request.resource.data.householdId is string);
     }
+
+    // Items collection:
+    match /items/{itemId} {
+      allow read: if request.auth != null &&
+                       (resource.data.isPrivate == true && request.auth.uid == resource.data.creatorUserId) ||
+                       (resource.data.isPrivate == false && getUserData(request.auth.uid).householdId == resource.data.householdId);
+
+      allow create: if request.auth != null &&
+                       request.resource.data.creatorUserId == request.auth.uid &&
+                       request.resource.data.householdId == getUserData(request.auth.uid).householdId &&
+                       request.resource.data.isPrivate is bool; // Ensure isPrivate is explicitly set
+
+      allow update: if request.auth != null &&
+                       // Check ownership/household membership
+                       ((resource.data.isPrivate == true && request.auth.uid == resource.data.creatorUserId) ||
+                        (resource.data.isPrivate == false && getUserData(request.auth.uid).householdId == resource.data.householdId)) &&
+                       // Prevent changing critical fields like creator or household on update
+                       request.resource.data.creatorUserId == resource.data.creatorUserId &&
+                       request.resource.data.householdId == resource.data.householdId;
+
+      allow delete: if request.auth != null &&
+                       (resource.data.isPrivate == true && request.auth.uid == resource.data.creatorUserId) ||
+                       (resource.data.isPrivate == false && getUserData(request.auth.uid).householdId == resource.data.householdId);
+    }
+
+    // Households collection (example rules):
+    // match /households/{householdId} {
+    //   // Allow members to read their household document
+    //   allow read: if request.auth != null && getUserData(request.auth.uid).householdId == householdId;
+    //   // Allow owner to update (e.g., add/remove members from memberUserIds array)
+    //   allow write: if request.auth != null && request.auth.uid == resource.data.ownerUserId;
+    // }
   }
 }
 ```

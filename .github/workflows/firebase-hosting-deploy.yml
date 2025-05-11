@@ -1,0 +1,41 @@
+name: Deploy to Firebase Hosting
+
+on:
+  push:
+    branches:
+      - main # Deploy to production on push to main
+  pull_request:
+    branches:
+      - main # Deploy to preview channel for PRs against main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3 # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18" # Use a supported Node.js version
+
+      - name: Install dependencies
+        run: npm install # Or yarn install, pnpm install, etc. Make sure to install dependencies before building.
+        working-directory: ./frontend # Replace with your frontend project directory, if different
+
+      - name: Build the app
+        run: npm run build # Or yarn build, pnpm build. Make sure this matches your build command.
+        working-directory: ./frontend # Replace with your frontend project directory, if different
+
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: "${{ secrets.GITHUB_TOKEN }}"
+          firebaseServiceAccount: "${{ secrets.FIREBASE_SERVICE_ACCOUNT_HOME_STORAGE_SYSTEM }}"
+          projectId: home-storage-management-system # Replace with your Firebase project ID
+          channelId: live # Defaults to live, use this on the main branch
+          # If deploying from a pull request
+          # Uncomment the following lines and replace with the appropriate values.
+          # If you aren't using the automatic preview channel, you can remove the last two lines.
+          # channelId: "PR-${{ github.event.number }}" # Create a preview channel based on the PR number
+          # message: "Deploy preview for PR #${{ github.event.number }}" # Optional
