@@ -17,8 +17,11 @@ service cloud.firestore {
     // Users collection:
     match /users/{userId} {
       allow read, update: if request.auth.uid == userId;
+      // Allow user to create their own profile. householdId is optional and can be null.
       allow create: if request.auth.uid == userId &&
-                          (request.resource.data.householdId == null || request.resource.data.householdId is string);
+                       (request.resource.data.keys().hasOnly(['email', 'displayName', 'created', 'lastLogin', 'householdId']) ||
+                        request.resource.data.keys().hasOnly(['email', 'displayName', 'created', 'lastLogin'])) &&
+                       (request.resource.data.householdId == null || request.resource.data.householdId is string);
     }
 
     // Items collection:
@@ -45,13 +48,27 @@ service cloud.firestore {
                        (resource.data.isPrivate == false && getUserData(request.auth.uid).householdId == resource.data.householdId);
     }
 
-    // Households collection (example rules - uncomment and adapt if Households collection is actively managed via client):
-    // match /households/{householdId} {
-    //   // Allow members to read their household document
-    //   allow read: if request.auth != null && getUserData(request.auth.uid).householdId == householdId;
-    //   // Allow owner to update (e.g., add/remove members from memberUserIds array)
-    //   // This rule would need careful consideration for what fields can be updated.
-    //   allow write: if request.auth != null && request.auth.uid == resource.data.ownerUserId;
-    // }
+    // Households collection (example rules):
+    match /households/{householdId} {
+      // Allow members to read their household document
+      allow read: if request.auth != null && getUserData(request.auth.uid).householdId == householdId && resource.data.memberUserIds.hasAny([request.auth.uid]);
+      // Allow authenticated user to create a household if they don't already belong to one.
+      // The function will set ownerUserId and memberUserIds.
+      allow create: if request.auth != null &&
+                       getUserData(request.auth.uid).householdId == null &&
+                       request.resource.data.ownerUserId == request.auth.uid &&
+                       request.resource.data.memberUserIds.size() == 1 &&
+                       request.resource.data.memberUserIds[0] == request.auth.uid &&
+                       request.resource.data.name is string;
+      // Allow owner to update the household name.
+      // Managing members (add/remove) might need more specific rules or dedicated functions if complex.
+      allow update: if request.auth != null &&
+                       request.auth.uid == resource.data.ownerUserId &&
+                       request.resource.data.keys().hasOnly(['name', 'ownerUserId', 'memberUserIds', 'created']) && // Prevent changing owner/members arbitrarily here
+                       request.resource.data.ownerUserId == resource.data.ownerUserId &&
+                       request.resource.data.memberUserIds == resource.data.memberUserIds; // Simplistic: owner/members not changed by this rule
+      // Deleting households might be restricted to owners and could have cascading effects (orphaned items if not handled)
+      // allow delete: if request.auth != null && request.auth.uid == resource.data.ownerUserId;
+    }
   }
 }

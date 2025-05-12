@@ -17,6 +17,12 @@ This document describes the technical architecture for a smart home storage trac
 2. **Finding items**: "OK Google, where is the microphone stand?"
 3. **Removing items**: "OK Google, I'm taking the microphone stand"
 4. **Web interface**: Manual CRUD operations and CSV import
+5. **Creating a Household (Web Interface)**:
+    a. New user registers; their `householdId` is initially null.
+    b. User is guided to a "Household Setup" page.
+    c. User enters a desired name for their new household and submits.
+    d. The UI calls `POST /api/households` with the chosen name.
+    e. If successful, the user is now part of the new household, and their `householdId` is updated in their user profile.
 
 ## 2. System Architecture
 
@@ -100,6 +106,9 @@ This document describes the technical architecture for a smart home storage trac
 }
 ```
 
+#### Dialogflow Webhook
+- `POST /api/dialogflow-webhook` - Entry point for Dialogflow fulfillment
+
 ### 3.2 Item States
 
 - **STORED**: The item is currently in a tote at the specified location
@@ -107,22 +116,27 @@ This document describes the technical architecture for a smart home storage trac
 
 ## 4. API Design
 
-### 4.1 Firebase Functions Endpoints
+### 4.1 API Endpoints (Served by a Single '/api' Router Function)
 
 #### Authentication
-- `POST /auth/register` - Create new user account
-- `POST /auth/resetPassword` - Password reset flow
+- `POST /api/register` - Create new user account
+- `POST /api/reset_password` - Password reset flow
 
 #### Items Management
-- `GET /items` - List all items (with optional filters)
-- `GET /items/{itemId}` - Get a specific item
-- `POST /items` - Create a new item
-- `PUT /items/{itemId}` - Update an item
-- `DELETE /items/{itemId}` - Delete an item
-- `POST /items/bulk` - Bulk import items via CSV
+- `GET /api/items` - List all items (with optional filters)
+- `GET /api/items/{itemId}` - Get a specific item
+- `POST /api/items` - Create a new item
+- `PUT /api/items/{itemId}` - Update an item
+- `DELETE /api/items/{itemId}` - Delete an item
+- `POST /api/items/bulk` - Bulk import items via CSV
 
 #### Dialogflow Webhook
-- `POST /dialogflow-webhook` - Entry point for Dialogflow fulfillment
+- `POST /api/dialogflow-webhook` - Entry point for Dialogflow fulfillment
+
+#### Household Management
+- `POST /api/households` - Create a new household. User becomes owner and a member. User's `householdId` in their user profile is updated.
+    - **Request Body**: `{ "name": "My New Household Name" }`
+    - **Response**: Standard success/error format with created household data.
 
 ### 4.2 Response Format
 
@@ -324,8 +338,10 @@ service cloud.firestore {
     // Users collection:
     match /users/{userId} {
       allow read, update: if request.auth.uid == userId;
-      // Allow user to create their own profile. householdId is optional.
+      // Allow user to create their own profile. householdId is optional and can be null.
       allow create: if request.auth.uid == userId &&
+                       (request.resource.data.keys().hasOnly(['email', 'displayName', 'created', 'lastLogin', 'householdId']) ||
+                        request.resource.data.keys().hasOnly(['email', 'displayName', 'created', 'lastLogin'])) &&
                        (request.resource.data.householdId == null || request.resource.data.householdId is string);
     }
 
@@ -354,12 +370,27 @@ service cloud.firestore {
     }
 
     // Households collection (example rules):
-    // match /households/{householdId} {
-    //   // Allow members to read their household document
-    //   allow read: if request.auth != null && getUserData(request.auth.uid).householdId == householdId;
-    //   // Allow owner to update (e.g., add/remove members from memberUserIds array)
-    //   allow write: if request.auth != null && request.auth.uid == resource.data.ownerUserId;
-    // }
+    match /households/{householdId} {
+      // Allow members to read their household document
+      allow read: if request.auth != null && getUserData(request.auth.uid).householdId == householdId && resource.data.memberUserIds.hasAny([request.auth.uid]);
+      // Allow authenticated user to create a household if they don't already belong to one.
+      // The function will set ownerUserId and memberUserIds.
+      allow create: if request.auth != null &&
+                       getUserData(request.auth.uid).householdId == null &&
+                       request.resource.data.ownerUserId == request.auth.uid &&
+                       request.resource.data.memberUserIds.size() == 1 &&
+                       request.resource.data.memberUserIds[0] == request.auth.uid &&
+                       request.resource.data.name is string;
+      // Allow owner to update the household name.
+      // Managing members (add/remove) might need more specific rules or dedicated functions if complex.
+      allow update: if request.auth != null &&
+                       request.auth.uid == resource.data.ownerUserId &&
+                       request.resource.data.keys().hasOnly(['name', 'ownerUserId', 'memberUserIds', 'created']) && // Prevent changing owner/members arbitrarily here
+                       request.resource.data.ownerUserId == resource.data.ownerUserId &&
+                       request.resource.data.memberUserIds == resource.data.memberUserIds; // Simplistic: owner/members not changed by this rule
+      // Deleting households might be restricted to owners and could have cascading effects (orphaned items if not handled)
+      // allow delete: if request.auth != null && request.auth.uid == resource.data.ownerUserId;
+    }
   }
 }
 ```

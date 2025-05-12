@@ -521,6 +521,68 @@ def _get_item_logic(req: https_fn.Request, actual_item_id: str) -> https_fn.Resp
         return https_fn.Response(status=500, response=json.dumps({"success": False, "error": {"code": "INTERNAL_SERVER_ERROR", "message": str(e)}}), mimetype="application/json")
 
 
+# --- Household Management Logic ---
+def _create_household_logic(req: https_fn.Request) -> https_fn.Response:
+    """Creates a new household and assigns the authenticated user as the owner.
+    Updates the user's profile with the new householdId.
+    """
+    if req.method != "POST":
+        return https_fn.Response(status=405, response=json.dumps({"success": False, "error": {"code": "METHOD_NOT_ALLOWED", "message": "Method not allowed."}}), mimetype="application/json")
+
+    auth_user_uid = req.user["uid"]
+    user_profile = get_user_data_from_firestore(auth_user_uid)
+
+    if not user_profile:
+        # This should ideally not happen if require_auth is used and user exists in Auth but not Firestore
+        # Or if get_user_data_from_firestore failed for other reasons
+        return https_fn.Response(status=404, response=json.dumps({"success": False, "error": {"code": "USER_PROFILE_NOT_FOUND", "message": "User profile not found."}}), mimetype="application/json")
+
+    if user_profile.get("householdId"):
+        return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "ALREADY_IN_HOUSEHOLD", "message": "User already belongs to a household."}}), mimetype="application/json")
+
+    try:
+        data = req.get_json()
+        if not data or not data.get("name"):
+            return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "MISSING_HOUSEHOLD_NAME", "message": "Household name is required."}}), mimetype="application/json")
+
+        household_name = data["name"].strip()
+        if not household_name:
+            return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "INVALID_HOUSEHOLD_NAME", "message": "Household name cannot be empty."}}), mimetype="application/json")
+
+        # Create household document
+        household_data = {
+            "name": household_name,
+            "ownerUserId": auth_user_uid,
+            "memberUserIds": [auth_user_uid],
+            "created": firestore.SERVER_TIMESTAMP
+        }
+        # Firestore batch for atomic operation
+        batch = db.batch()
+
+        new_household_ref = db.collection("households").document()
+        batch.set(new_household_ref, household_data)
+
+        # Update user's householdId
+        user_ref = db.collection("users").document(auth_user_uid)
+        batch.update(user_ref, {"householdId": new_household_ref.id})
+
+        batch.commit()
+
+        # Fetch the created household to return its data (including server-generated timestamp)
+        created_household_doc = new_household_ref.get()
+        response_data = created_household_doc.to_dict()
+        response_data["id"] = created_household_doc.id
+        if 'created' in response_data and hasattr(response_data['created'], 'isoformat'):
+            response_data['created'] = response_data['created'].isoformat()
+
+        return https_fn.Response(status=201, response=json.dumps({"success": True, "data": response_data, "error": None}), mimetype="application/json")
+
+    except Exception as e:
+        # Log the exception for debugging
+        # print(f"Error creating household: {e}")
+        return https_fn.Response(status=500, response=json.dumps({"success": False, "error": {"code": "INTERNAL_SERVER_ERROR", "message": str(e)}}), mimetype="application/json")
+
+
 # --- API Router Function ---
 @https_fn.on_request(max_instances=10, memory=options.MemoryOption.MB_256) # Added default options, can be adjusted
 def api(req: https_fn.Request) -> https_fn.Response:
@@ -532,7 +594,7 @@ def api(req: https_fn.Request) -> https_fn.Response:
     # The rewrite rule in firebase.json will be {"source": "/api/**", "function": "api"}
     # So, req.path inside the function will be like '/api/register', '/api/items', '/api/items/123'
     # For functions deployed directly, the path is simply '/', unless a base path is part of the trigger.
-    # Assuming the firebase.json rewrite, req.path will NOT include '/api'. FALSE it does include it, at least in local testing
+    # Assuming the firebase.json rewrite, req.path will NOT include '/api'. ADDED BY USER: AT LEAST IN LOCAL TESTING, IT DOES INCLUDE '/api', IMOPRTANT DO NOT REMOVE
 
     normalized_path = req.path.rstrip("/") # Remove trailing slash for consistency
 
@@ -541,6 +603,9 @@ def api(req: https_fn.Request) -> https_fn.Response:
 
     if normalized_path == "/api/reset_password" and req.method == "POST":
         return _reset_password_logic(req)
+
+    if normalized_path == "/api/households" and req.method == "POST":
+        return require_auth(_create_household_logic)(req)
 
     if normalized_path == "/api/items" and req.method == "POST":
         return require_auth(_create_item_logic)(req)
@@ -551,7 +616,7 @@ def api(req: https_fn.Request) -> https_fn.Response:
     # Handle /items/{item_id} type paths
     if normalized_path.startswith("/api/items/"):
         path_parts = normalized_path.split("/") # e.g., ['', 'api', 'items', 'item_id'] for "/api/items/item_id"
-        if len(path_parts) == 4: # Ensure it's /api/items/{item_id} and not /api/items/{item_id}/something_else
+        if len(path_parts) == 4:
             actual_item_id = path_parts[3]
             if req.method == "GET":
                 return require_auth(_get_item_logic)(req, actual_item_id=actual_item_id)
