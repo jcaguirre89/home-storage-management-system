@@ -17,9 +17,9 @@ This checklist breaks down the development process into focused phases with clea
 - [x] Implement basic security rules for data access
 - [x] Create test items in Firestore to verify schema
 - [x] Implement user authentication endpoints (register/login)
-- [ ] Build core item CRUD endpoints in Firebase Functions
-- [ ] Write basic validation logic for all inputs
-- [ ] Test API endpoints using Postman or similar tool
+- [x] Build core item CRUD endpoints in Firebase Functions
+- [x] Test API endpoints using Postman or similar tool
+- [x] Write basic validation logic for all inputs
 
 **Success Criteria:** You can create, retrieve, update, and delete items via API calls. Authentication is working for a test user.
 

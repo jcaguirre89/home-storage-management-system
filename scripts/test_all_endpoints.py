@@ -6,7 +6,7 @@ import uuid
 from seedEmulator import seed_database
 
 # Seed database
-seed_database()
+# seed_database()
 
 # --- Configuration ---
 AUTH_EMULATOR_HOST_PORT = os.environ.get("FIREBASE_AUTH_EMULATOR_HOST", "localhost:9099")
@@ -31,9 +31,6 @@ GET_ITEMS_URL = f"{FUNCTIONS_BASE_URL}/{ITEMS_RESOURCE_PATH}"
 # Individual item URLs will be constructed dynamically:
 # e.g., f"{FUNCTIONS_BASE_URL}/{ITEMS_RESOURCE_PATH}/{{item_id}}" which becomes http://localhost:8080/api/items/{{item_id}}
 
-# Household IDs (as in seedEmulator.py, but registration doesn't require them to pre-exist in Firestore for the auth part)
-HOUSEHOLD_ID_ALPHA = "household-alpha"
-HOUSEHOLD_ID_BETA = "household-beta"
 
 # Globals to store state during tests
 current_id_token = None
@@ -107,12 +104,11 @@ def test_registration_scenarios():
     # Scenario 1: Successful registration for the main user who will do item tests
     main_test_user_email = generate_unique_email("main_item_tester")
     main_test_user_password = "securePassword123!"
-    print(f"Registering main test user: {main_test_user_email} for household {HOUSEHOLD_ID_ALPHA}")
+    print(f"Registering main test user: {main_test_user_email} with no householdId")
     response = register_user_via_function(
         main_test_user_email,
         main_test_user_password,
-        display_name="Main Item Tester",
-        household_id=HOUSEHOLD_ID_ALPHA
+        display_name="Main Item Tester"
     )
     if response.status_code == 201 and response.json().get("success"):
         main_test_user_uid = response.json().get("data", {}).get("uid")
@@ -149,7 +145,6 @@ def test_registration_scenarios():
         email_for_reset,
         password_for_reset,
         display_name="User For Reset",
-        household_id=HOUSEHOLD_ID_BETA # Using a different household for variety
     )
     return email_for_reset # Return this email for use in password reset tests
 
@@ -202,6 +197,41 @@ def login_user_direct_auth_emulator(email, password):
             # Already printed by print_response_details if called
             pass
         return False
+
+# --- Household Management Test Functions ---
+def test_create_household(household_name):
+    print_test_name(f"Create Household: {household_name}")
+    if not current_id_token:
+        print("⚠️ Skipping test_create_household: No ID token available.")
+        return None # Return None if skipped or failed
+
+    payload = {"name": household_name}
+    headers = {
+        "Authorization": f"Bearer {current_id_token}",
+        "Content-Type": "application/json"
+    }
+    create_household_url = f"{FUNCTIONS_BASE_URL}/households"
+
+    household_id = None
+    response_json = None
+    try:
+        response = requests.post(create_household_url, json=payload, headers=headers)
+        print_response_details(response)
+        response_json = response.json() # Store for later access
+        if response.status_code == 201 and response_json.get("success") and response_json.get("data", {}).get("id"):
+            household_id = response_json["data"]["id"]
+            print(f"✅ Household '{household_name}' created successfully with ID: {household_id}")
+        elif response.status_code == 400 and response_json.get("error", {}).get("code") == "ALREADY_IN_HOUSEHOLD":
+            print(f"✅ Correctly prevented creating a second household: {response_json.get('error',{}).get('message')}")
+        else:
+            print(f"❌ Error: Household creation for '{household_name}' failed or response format incorrect.")
+            if response.status_code // 100 == 2: # if 2xx status but not as expected
+                 response.raise_for_status() # Will raise for other 2xx if not 201 with correct body
+
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Error during create_household request for '{household_name}': {e}")
+
+    return household_id, response_json # Return ID and full response for further checks
 
 # --- Item Management Test Functions ---
 def test_create_item():
@@ -357,6 +387,17 @@ if __name__ == "__main__":
     if main_test_user_email and main_test_user_password:
         if login_user_direct_auth_emulator(main_test_user_email, main_test_user_password):
             print_test_header("ITEM MANAGEMENT: Proceeding with Item CRUD Tests")
+
+            # === Create Household for Main User ===
+            household_name = f"{main_test_user_email.split('@')[0]}'s Household"
+            created_household_id, _ = test_create_household(household_name)
+            if not created_household_id:
+                print("❌ CRITICAL: Main test user failed to create a household. Cannot proceed with item tests that depend on householdId.")
+                # Depending on strictness, you might exit(1) here or allow item tests to fail if they rely on user's householdId
+            else:
+                print(f"✅ Main test user now associated with household: {created_household_id}")
+                # Test attempting to create a second household (should fail)
+                test_create_household(f"Second Household Attempt by {main_test_user_email.split('@')[0]}")
 
             # === Main Item CRUD Flow ===
             first_item_id = test_create_item() # Create a public item
