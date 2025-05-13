@@ -26,42 +26,42 @@ const createUserStore = () => {
       return null;
     }
   };
-
   const signUp = async (email, password, displayName) => {
-    set({ user: null, loading: true, error: null });
+    set({ user: null, loading: true, error: null }); // Set initial loading state
     try {
-      // First, create the user in Firebase Auth
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const firebaseUser = userCredential.user;
-
-      // Then, call our backend to create the user document in Firestore
-      // This matches the flow in your main.py _register_logic
+      // Step 1: Call your backend API to register the user.
+      // The backend will handle creating the user in Firebase Auth and Firestore.
       const response = await fetch('/api/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password, displayName }), // Send original password for backend to create user
+        body: JSON.stringify({ email, password, displayName }),
       });
 
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        // If backend registration fails, we should ideally delete the Firebase Auth user
-        // or handle this more gracefully. For now, log error and reflect in store.
-        console.error("Backend user creation failed:", result.error);
-        // Potentially sign out the newly created auth user if backend part fails
-        if (firebaseUser) await firebaseSignOut(auth);
-        throw new Error(result.error?.message || 'Backend user registration failed');
+        // If backend registration fails, throw an error to be caught by the catch block.
+        const errorMessage = result.error?.message || `Backend registration failed with status: ${response.status}`;
+        console.error("Backend user creation failed:", result.error || errorMessage);
+        throw new Error(errorMessage);
       }
 
-      // Auth state will be updated by onAuthStateChanged,
-      // or we can set it manually if needed, but onAuthStateChanged is usually sufficient.
-      set({ user: firebaseUser, loading: false, error: null });
-      return firebaseUser;
+      // Step 2: Backend registration was successful.
+      // Now, sign in the user on the client-side to establish the session
+      // and trigger onAuthStateChanged.
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+
+      // onAuthStateChanged will handle updating the store with the user,
+      // setting loading to false, and error to null.
+      // We return the user object from the successful client-side sign-in.
+      return userCredential.user;
+
     } catch (err) {
+      // Catch any errors from the fetch call, backend response, or client-side sign-in.
       set({ user: null, loading: false, error: err });
-      console.error("Signup error:", err);
+      console.error("Signup process error:", err);
       return null;
     }
   };

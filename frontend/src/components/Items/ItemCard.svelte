@@ -1,6 +1,6 @@
 <script>
   export let item;
-  import { itemsStore } from '../../../stores/items'; // Adjusted path
+  import { itemsStore } from '../../stores/items'; // Adjusted path
   import { createEventDispatcher } from 'svelte';
 
   const dispatch = createEventDispatcher();

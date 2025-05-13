@@ -1,5 +1,22 @@
-<script>
+<script context="module" lang="ts">
+  // Define the Item interface based on usage
+  export interface Item {
+    id: string; // Assuming ID is a string, adjust if different
+    name: string;
+    location: string;
+    status: 'STORED' | 'OUT'; // Use literal types if status is fixed
+    isPrivate: boolean;
+    metadata?: {
+      category?: string;
+      notes?: string;
+    };
+    // Add other fields if they exist (e.g., creatorUserId, householdId, createdAt)
+  }
+</script>
+
+<script lang="ts">
   import { onMount } from 'svelte';
+  import type { Writable } from 'svelte/store'; // Import Writable type
   import { itemsStore } from '../../../stores/items'; // Adjusted path
   import { user } from '../../../stores/auth'; // For creatorUserId and householdId context if needed
   import ItemCard from '../../../components/Items/ItemCard.svelte'; // Adjusted path
@@ -12,7 +29,8 @@
     itemsStore.fetchItems();
   });
 
-  $: filteredItems = $itemsStore.items.filter(item =>
+  // Let type inference handle filteredItems, assuming itemsStore provides typed items
+  $: filteredItems = $itemsStore.items.filter((item: Item) => // Add Item type hint here if needed
     item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (item.metadata?.category && item.metadata.category.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (item.location && item.location.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -59,8 +77,9 @@
         }
       });
       showCreateModal = false;
-    } catch (err) {
-      itemFormError = err.message || "Failed to create item.";
+    } catch (err: unknown) { // Explicitly type err as unknown
+      // Type the error
+      itemFormError = err instanceof Error ? err.message : String(err) || "Failed to create item.";
     } finally {
       itemFormLoading = false;
     }
@@ -83,7 +102,8 @@
   {#if $itemsStore.loading}
     <p class="text-center text-gray-500 py-8">Loading items...</p>
   {:else if $itemsStore.error}
-    <p class="text-center text-red-500 py-8">Error loading items: {$itemsStore.error.message}</p>
+    <!-- Safely access error message -->
+    <p class="text-center text-red-500 py-8">Error loading items: {$itemsStore.error instanceof Error ? $itemsStore.error.message : String($itemsStore.error)}</p>
   {:else if filteredItems.length === 0}
     <div class="text-center py-10 px-6 bg-white shadow-md rounded-lg">
         <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -120,7 +140,7 @@
   <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
     <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
     <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-    <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+    <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full z-20">
       <form on:submit|preventDefault={handleCreateItem} class="p-6 space-y-4">
         <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">Add New Item</h3>
         <div>
