@@ -1,6 +1,22 @@
-<script>
+<script lang="ts">
   import { user } from '../../stores/auth';
   import { goto } from '$app/navigation';
+  import { get } from 'svelte/store';
+
+  type AppUser = {
+    uid: string;
+    email: string | null;
+    emailVerified: boolean;
+    displayName: string | null;
+    householdId: string | null;
+  };
+
+  type UserStoreState = {
+    user: AppUser | null;
+    profile: Record<string, any> | null;
+    loading: boolean;
+    error: Error | null;
+  };
 
   let email = '';
   let password = '';
@@ -12,35 +28,39 @@
     isLoading = true;
     errorMessage = '';
     try {
-      const signedUpUser = await user.signUp(email, password, displayName);
-      if (signedUpUser) {
-        // The `/api/register` backend endpoint is called within user.signUp
-        // It creates the user in Auth and then hits our backend to create the user doc.
-        // As per your tech doc, householdId is optional at registration.
-        // User will be guided to household setup after this.
-        goto('/dashboard'); // Or perhaps to a household setup page: /household/setup
-      } else {
+      const signedUpFirebaseUser = await user.signUp(email, password, displayName);
+
+      if (!signedUpFirebaseUser) {
         setTimeout(() => {
-          const storeError = $user.error;
-          if (storeError) {
-            errorMessage = storeError.message || 'Sign up failed. Please try again.';
-          } else {
-            errorMessage = 'Sign up failed. Please try again.';
+          const currentStoreState = get(user) as UserStoreState;
+          if (currentStoreState.error) {
+            errorMessage = currentStoreState.error.message || 'Sign up failed. Please check details.';
+          } else if (!currentStoreState.user) {
+            errorMessage = 'Sign up process did not complete. Please try again.';
           }
           isLoading = false;
         }, 100);
       }
-    } catch (error) {
+
+    } catch (error: any) {
       errorMessage = error.message || 'An unexpected error occurred during sign up.';
       isLoading = false;
     }
   };
 
-  user.subscribe(value => {
+  user.subscribe((value: UserStoreState) => {
+    if (value.loading) return;
+
     if (value.user) {
-      // If user is created and logged in, redirect.
-      // Consider where to redirect: dashboard or household setup as per your flow.
-      goto('/dashboard');
+      if (value.user.householdId) {
+        goto('/dashboard');
+      } else {
+        goto('/household/setup');
+      }
+      isLoading = false;
+    } else if (value.error) {
+        errorMessage = value.error.message || "Signup or login failed.";
+        isLoading = false;
     }
   });
 
