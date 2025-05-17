@@ -1,134 +1,189 @@
-<script context="module" lang="ts">
-  // Define the Item interface based on usage
-  export interface Item {
-    id: string; // Assuming ID is a string, adjust if different
-    name: string;
-    location: string;
-    status: 'STORED' | 'OUT'; // Use literal types if status is fixed
-    isPrivate: boolean;
-    metadata?: {
-      category?: string;
-      notes?: string;
-    };
-    // Add other fields if they exist (e.g., creatorUserId, householdId, createdAt)
-  }
-</script>
-
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Writable } from 'svelte/store'; // Import Writable type
-  import { itemsStore } from '../../../stores/items'; // Adjusted path
-  import { user } from '../../../stores/auth'; // For creatorUserId and householdId context if needed
-  import ItemCard from '../../../components/Items/ItemCard.svelte'; // Adjusted path
-  import SearchBar from '../../../components/Layout/SearchBar.svelte'; // Adjusted path for a generic search bar
+  // import type { Writable } from 'svelte/store'; // Writable type might not be needed if not directly used.
+  import { itemsStore } from '../../../stores/items'; // Keep store import
+  import { user } from '../../../stores/auth';   // Keep store import
+  import ItemCard from '../../../components/Items/ItemCard.svelte';
+  import SearchBar from '../../../components/Layout/SearchBar.svelte';
 
-  let searchTerm = '';
-  let showCreateModal = false;
+  // --- Locally Defined Types --- START ---
+  // (These were confirmed to be correct and necessary in previous steps as stores don't export them)
+  type AppUser = {
+    uid: string;
+    email: string | null;
+    emailVerified: boolean;
+    displayName: string | null;
+    householdId: string | null;
+  };
+
+  type UserStoreData = {
+    user: AppUser | null;
+    profile: Record<string, any> | null;
+    loading: boolean;
+    error: Error | null;
+  };
+
+  type ItemMetadata = {
+    category?: string;
+    notes?: string;
+    [key: string]: any;
+  };
+
+  type Item = {
+    id: string;
+    name: string;
+    location: string;
+    status: 'STORED' | 'OUT';
+    isPrivate: boolean;
+    creatorUserId: string; // Added based on common requirements
+    householdId: string;   // Added based on common requirements
+    lastUpdated?: any;
+    metadata?: ItemMetadata;
+  };
+
+  type ItemStoreData = {
+    items: Item[];
+    loading: boolean;
+    error: Error | null;
+  };
+  // --- Locally Defined Types --- END ---
+
+  let currentUser = $derived(($user as UserStoreData).user);
+  let searchTerm = $state('');
+  let showCreateModal = $state(false);
+
+  let newItemName = $state('');
+  let newItemLocation = $state('');
+  let newItemCategory = $state('');
+  let newItemNotes = $state('');
+  let newItemStatus = $state('STORED' as 'STORED' | 'OUT');
+  let newItemIsPrivate = $state(false);
+
+  let createFormError = $state('');
+  let createFormLoading = $state(false);
 
   onMount(() => {
     itemsStore.fetchItems();
   });
 
-  // Let type inference handle filteredItems, assuming itemsStore provides typed items
-  $: filteredItems = $itemsStore.items.filter((item: Item) => // Add Item type hint here if needed
-    item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (item.metadata?.category && item.metadata.category.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (item.location && item.location.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
-
-  // For ItemForm modal - will be part of Item Creation step
-  let newItemName = '';
-  let newItemLocation = '';
-  let newItemStatus = 'STORED';
-  let newItemIsPrivate = false;
-  let newItemCategory = '';
-  let newItemNotes = '';
-  let itemFormError = '';
-  let itemFormLoading = false;
-
-  const openCreateModal = () => {
+  function openCreateModal() {
     newItemName = '';
     newItemLocation = '';
-    newItemStatus = 'STORED';
-    newItemIsPrivate = false;
     newItemCategory = '';
     newItemNotes = '';
-    itemFormError = '';
+    newItemStatus = 'STORED';
+    newItemIsPrivate = false;
+    createFormError = '';
     showCreateModal = true;
-  };
+  }
 
-  const handleCreateItem = async () => {
-    itemFormLoading = true;
-    itemFormError = '';
-    if (!newItemName || !newItemLocation) {
-      itemFormError = 'Name and Location are required.';
-      itemFormLoading = false;
+  async function handleCreateItem(event: Event) {
+    event.preventDefault();
+    if (!newItemName.trim() || !newItemLocation.trim()) {
+      createFormError = 'Name and Location are required.';
       return;
     }
+    if (!currentUser?.uid || !currentUser?.householdId) {
+        createFormError = 'User information is missing. Cannot create item.';
+        return;
+    }
+
+    createFormLoading = true;
+    createFormError = '';
     try {
-      await itemsStore.addItem({
-        name: newItemName,
-        location: newItemLocation,
+      // For Item type, ensure all required fields by the type definition are considered
+      // The actual creation payload might differ if backend sets some fields (creatorUserId, householdId)
+      const itemDataToCreate = {
+        name: newItemName.trim(),
+        location: newItemLocation.trim().toUpperCase(),
         status: newItemStatus,
         isPrivate: newItemIsPrivate,
         metadata: {
-          category: newItemCategory,
-          notes: newItemNotes,
-        }
-      });
-      showCreateModal = false;
-    } catch (err: unknown) { // Explicitly type err as unknown
-      // Type the error
-      itemFormError = err instanceof Error ? err.message : String(err) || "Failed to create item.";
+          category: newItemCategory.trim(),
+          notes: newItemNotes.trim(),
+        },
+        // creatorUserId: currentUser.uid, // Usually set by backend based on authenticated user
+        // householdId: currentUser.householdId, // Usually set by backend
+      };
+      await itemsStore.addItem(itemDataToCreate);
+      closeCreateModal();
+    } catch (err: unknown) {
+      console.error("Error creating item:", err);
+      if (err instanceof Error) {
+        createFormError = err.message;
+      } else {
+        createFormError = 'An unknown error occurred. Please try again.';
+      }
     } finally {
-      itemFormLoading = false;
+      createFormLoading = false;
     }
-  };
+  }
+
+  function closeCreateModal() {
+    showCreateModal = false;
+  }
+
+  $effect(() => {
+    if (!showCreateModal) {
+      createFormError = '';
+    }
+  });
+
+  let filteredItems = $derived((($items): Item[] => {
+    if (!searchTerm.trim()) {
+      return ($items as ItemStoreData).items;
+    }
+    return ($items as ItemStoreData).items.filter(item =>
+      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.metadata?.category && item.metadata.category.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
+  })($itemsStore));
+
+  function handleItemDeleted(event: CustomEvent<{ id: string }>) {
+    console.log(`Item with id ${event.detail.id} was deleted, list should update via store.`);
+  }
 
 </script>
+
+<svelte:head>
+  <title>My Items</title>
+</svelte:head>
 
 <div class="space-y-6">
   <div class="md:flex md:items-center md:justify-between">
     <h1 class="text-3xl font-bold text-gray-800">My Items</h1>
     <button
-      on:click={openCreateModal}
+      onclick={openCreateModal}
       class="mt-4 md:mt-0 w-full md:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
       Add New Item
     </button>
   </div>
 
-  <SearchBar bind:searchTerm placeholder="Search items by name, category, location..." />
+  <SearchBar bind:searchTerm={searchTerm} />
 
-  {#if $itemsStore.loading}
-    <p class="text-center text-gray-500 py-8">Loading items...</p>
-  {:else if $itemsStore.error}
-    <!-- Safely access error message -->
-    <p class="text-center text-red-500 py-8">Error loading items: {$itemsStore.error instanceof Error ? $itemsStore.error.message : String($itemsStore.error)}</p>
+  {#if ($itemsStore as ItemStoreData).loading}
+    <p class="text-center text-gray-500 py-10">Loading items...</p>
+  {:else if ($itemsStore as ItemStoreData).error}
+    <p class="text-center text-red-500 py-10">Error loading items: {($itemsStore as ItemStoreData).error?.message}</p>
   {:else if filteredItems.length === 0}
-    <div class="text-center py-10 px-6 bg-white shadow-md rounded-lg">
-        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-            <path vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-        </svg>
-        <h3 class="mt-2 text-sm font-medium text-gray-900">No items found</h3>
-        <p class="mt-1 text-sm text-gray-500">
-            {#if searchTerm}
-                Try adjusting your search or
-            {/if}
-            get started by adding a new item.
-        </p>
-        <div class="mt-6">
-            <button
-              on:click={openCreateModal}
-              type="button"
-              class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-              Add New Item
-            </button>
-        </div>
+    <div class="text-center py-10">
+      <p class="text-xl text-gray-500 mb-4">
+        {#if searchTerm.trim()}No items match "{searchTerm}".{:else}You don't have any items yet.{/if}
+      </p>
+      {#if !searchTerm.trim()}
+        <button
+          onclick={openCreateModal}
+          type="button"
+          class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+          Add Your First Item
+        </button>
+      {/if}
     </div>
   {:else}
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
       {#each filteredItems as item (item.id)}
-        <ItemCard {item} />
+        <ItemCard {item} on:itemdeleted={handleItemDeleted} />
       {/each}
     </div>
   {/if}
@@ -136,55 +191,59 @@
 
 <!-- Create Item Modal -->
 {#if showCreateModal}
-<div class="fixed z-10 inset-0 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-  <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-    <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
-    <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-    <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full z-20">
-      <form on:submit|preventDefault={handleCreateItem} class="p-6 space-y-4">
-        <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">Add New Item</h3>
-        <div>
-          <label for="itemName" class="block text-sm font-medium text-gray-700">Name*</label>
-          <input type="text" id="itemName" bind:value={newItemName} required class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500">
-        </div>
-        <div>
-          <label for="itemLocation" class="block text-sm font-medium text-gray-700">Location* (e.g., A1-D4)</label>
-          <input type="text" id="itemLocation" bind:value={newItemLocation} required pattern="[A-Da-d][1-4]" title="Enter a location like A1, B3, etc." class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500">
-        </div>
-        <div>
-          <label for="itemStatus" class="block text-sm font-medium text-gray-700">Status</label>
-          <select id="itemStatus" bind:value={newItemStatus} class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md bg-white">
-            <option value="STORED">STORED</option>
-            <option value="OUT">OUT</option>
-          </select>
-        </div>
-        <div>
-          <label for="itemCategory" class="block text-sm font-medium text-gray-700">Category</label>
-          <input type="text" id="itemCategory" bind:value={newItemCategory} class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500">
-        </div>
-        <div>
-          <label for="itemNotes" class="block text-sm font-medium text-gray-700">Notes</label>
-          <textarea id="itemNotes" rows="3" bind:value={newItemNotes} class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500"></textarea>
-        </div>
-        <div class="flex items-center">
-          <input id="itemIsPrivate" type="checkbox" bind:checked={newItemIsPrivate} class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
-          <label for="itemIsPrivate" class="ml-2 block text-sm text-gray-900">Private Item (only visible to you)</label>
-        </div>
+  <div class="fixed z-10 inset-0 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onclick={closeCreateModal}></div>
+      <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+      <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+        <form id="create-item-form" onsubmit={handleCreateItem} class="p-6 space-y-4">
+          <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">Add New Item</h3>
+          <div>
+            <label for="newItemName" class="block text-sm font-medium text-gray-700">Name*</label>
+            <input type="text" id="newItemName" bind:value={newItemName} required class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500">
+          </div>
+          <div>
+            <label for="newItemLocation" class="block text-sm font-medium text-gray-700">Location* (e.g., A1-D4)</label>
+            <input type="text" id="newItemLocation" bind:value={newItemLocation} required pattern="[A-Da-d][1-4]" title="Enter a location like A1, B3, etc." class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500">
+          </div>
+          <div>
+            <label for="newItemStatus" class="block text-sm font-medium text-gray-700">Status</label>
+            <select id="newItemStatus" bind:value={newItemStatus} class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md bg-white">
+              <option value="STORED">STORED</option>
+              <option value="OUT">OUT</option>
+            </select>
+          </div>
+          <div>
+            <label for="newItemCategory" class="block text-sm font-medium text-gray-700">Category</label>
+            <input type="text" id="newItemCategory" bind:value={newItemCategory} class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500">
+          </div>
+          <div>
+            <label for="newItemNotes" class="block text-sm font-medium text-gray-700">Notes</label>
+            <textarea id="newItemNotes" rows="3" bind:value={newItemNotes} class="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+          </div>
+          <div class="flex items-center">
+            <input id="newItemIsPrivate" type="checkbox" bind:checked={newItemIsPrivate} class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+            <label for="newItemIsPrivate" class="ml-2 block text-sm text-gray-900">Private Item</label>
+          </div>
 
-        {#if itemFormError}
-          <p class="text-sm text-red-600">{itemFormError}</p>
-        {/if}
+          {#if createFormError}
+            <p class="text-sm text-red-600">{createFormError}</p>
+          {/if}
 
-        <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-          <button type="submit" disabled={itemFormLoading} class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50">
-            {#if itemFormLoading}Saving...{:else}Save Item{/if}
-          </button>
-          <button type="button" on:click={() => showCreateModal = false} class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
-            Cancel
-          </button>
-        </div>
-      </form>
+          <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse -mx-6 -mb-6 mt-6 rounded-b-lg">
+            <button type="submit" disabled={createFormLoading} class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50">
+              {#if createFormLoading}Creating...{:else}Create Item{/if}
+            </button>
+            <button type="button" onclick={closeCreateModal} class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
-</div>
 {/if}
+
+<style>
+  /* Add any specific styles for this page here */
+</style>

@@ -2,9 +2,9 @@
   // This layout can be extended later if needed for (app) group specific UI
   import Header from '../../components/Layout/Header.svelte'; // Corrected path
   import { user } from '../../stores/auth'; // Corrected path
-  import { goto } from '$app/navigation';
+  // import { goto } from '$app/navigation'; // No longer needed here
   import { browser } from '$app/environment';
-  import { onMount } from 'svelte';
+  // import { onMount } from 'svelte'; // No longer needed here
 
   // Define type for the user store's value (consistent with other files)
   type AppUser = {
@@ -21,44 +21,24 @@
     profile: Record<string, any> | null;
   };
 
-  // Auth guard for routes in (app) group
-  onMount(() => {
-    if (browser) {
-      const unsubscribe = user.subscribe((authStore: UserStoreValue) => {
-        if (!authStore.loading) {
-          if (!authStore.user) {
-            goto('/login');
-          }
-          unsubscribe(); // Unsubscribe after check to prevent memory leaks and multiple redirects
-        }
-      });
-      // Cleanup subscription on component destroy
-      return () => {
-        if (unsubscribe) {
-          unsubscribe();
-        }
-      };
-    }
-  });
+  // Auth guard for routes in (app) group - REMOVED onMount block
+  // The guard in +layout.js handles redirection.
 </script>
 
-{#if ($user as UserStoreValue).user} <!-- Only show header and slot if user is definitively logged in -->
+{#if browser && ($user as UserStoreValue).loading}
+  <div class="min-h-screen flex items-center justify-center">
+    <p>Loading authentication state...</p> <!-- Or a spinner component -->
+  </div>
+{:else if browser && !($user as UserStoreValue).user && !($user as UserStoreValue).loading}
+  <!-- This state should be handled by the redirect in +layout.js -->
+  <!-- If seen, it's a brief moment before client-side redirect by +layout.js -->
+  <div class="min-h-screen flex items-center justify-center">
+    <p>Redirecting to login...</p>
+  </div>
+{:else}
+  <!-- Render layout structure for SSR (user might be null) and for authenticated client-side -->
   <Header />
   <main class="flex-grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <slot />
   </main>
-{:else if ($user as UserStoreValue).loading && browser}
-  <div class="min-h-screen flex items-center justify-center">
-    <p>Loading authentication state...</p> <!-- Or a spinner component -->
-  </div>
-{:else if browser}
-  <!--
-    This state (browser, not loading, no user) should ideally be caught by the redirect in onMount.
-    If it ever shows, it implies a brief moment before redirection or an issue with redirection.
-    A fallback or a global redirect handler might be better.
-    For now, this will likely not be seen if the guard works correctly.
-  -->
-  <div class="min-h-screen flex items-center justify-center">
-    <p>Redirecting to login...</p>
-  </div>
 {/if}

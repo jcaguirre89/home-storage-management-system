@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { user } from '../../stores/auth';
   import { goto } from '$app/navigation';
-  import { get } from 'svelte/store';
+  import { user } from '../../stores/auth'; // Adjust path as necessary
+  import { onMount } from 'svelte';
 
+  // Define type for the user store's value (consistent with other files)
   type AppUser = {
     uid: string;
     email: string | null;
@@ -10,117 +11,114 @@
     displayName: string | null;
     householdId: string | null;
   };
-
-  type UserStoreState = {
+  type UserStoreValue = {
     user: AppUser | null;
-    profile: Record<string, any> | null;
     loading: boolean;
     error: Error | null;
+    profile: Record<string, any> | null;
   };
 
-  let email = '';
-  let password = '';
-  let displayName = '';
-  let errorMessage = '';
-  let isLoading = false;
+  let email = $state('');
+  let password = $state('');
+  let displayName = $state('');
+  let isLoading = $state(false);
+  let errorMessage = $state('');
 
-  const handleSignUp = async () => {
+  // Redirect if user is already logged in
+  onMount(() => {
+    const unsubscribe = user.subscribe((value: UserStoreValue) => {
+      if (!value.loading && value.user) {
+        goto('/dashboard'); // Or wherever you redirect logged-in users
+        if (unsubscribe) unsubscribe();
+      }
+    });
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  });
+
+  async function handleSubmit(event: Event) {
+    event.preventDefault();
+    if (!email.trim() || !password.trim() || !displayName.trim()) {
+      errorMessage = 'All fields are required.';
+      return;
+    }
+    if (password.length < 6) {
+      errorMessage = 'Password must be at least 6 characters long.';
+      return;
+    }
     isLoading = true;
     errorMessage = '';
     try {
-      const signedUpFirebaseUser = await user.signUp(email, password, displayName);
-
-      if (!signedUpFirebaseUser) {
-        setTimeout(() => {
-          const currentStoreState = get(user) as UserStoreState;
-          if (currentStoreState.error) {
-            errorMessage = currentStoreState.error.message || 'Sign up failed. Please check details.';
-          } else if (!currentStoreState.user) {
-            errorMessage = 'Sign up process did not complete. Please try again.';
-          }
-          isLoading = false;
-        }, 100);
-      }
-
-    } catch (error: any) {
-      errorMessage = error.message || 'An unexpected error occurred during sign up.';
-      isLoading = false;
-    }
-  };
-
-  user.subscribe((value: UserStoreState) => {
-    if (value.loading) return;
-
-    if (value.user) {
-      if (value.user.householdId) {
-        goto('/dashboard');
+      const registeredUser = await user.signUp(email, password, displayName);
+      if (registeredUser) {
+        // user.signIn in the store will trigger onAuthStateChanged, which then
+        // leads to redirect via onMount subscription or layout guards.
+        // goto('/dashboard'); // Not strictly needed if onMount handles it
       } else {
-        goto('/household/setup');
+        const storeError = ($user as UserStoreValue).error;
+        errorMessage = storeError?.message || 'Registration failed. Please try again.';
       }
+    } catch (err: any) {
+      console.error("Register page catch:", err);
+      errorMessage = err.message || 'An unexpected error occurred during registration.';
+    } finally {
       isLoading = false;
-    } else if (value.error) {
-        errorMessage = value.error.message || "Signup or login failed.";
-        isLoading = false;
     }
-  });
-
+  }
 </script>
 
-<div class="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-  <div class="max-w-md w-full space-y-8 p-10 bg-white shadow-lg rounded-xl">
-    <div>
-      <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
-        Create your account
-      </h2>
+<svelte:head>
+  <title>Register - Home Storage</title>
+</svelte:head>
+
+<div class="min-h-screen bg-gray-100 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+  <div class="sm:mx-auto sm:w-full sm:max-w-md">
+    <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">Create your account</h2>
+  </div>
+
+  <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+    <div class="bg-white py-8 px-4 shadow-xl rounded-lg sm:px-10">
+      <form class="space-y-6" onsubmit={handleSubmit}>
+        <div>
+          <label for="displayName" class="block text-sm font-medium text-gray-700"> Display Name </label>
+          <div class="mt-1">
+            <input id="displayName" name="displayName" type="text" required bind:value={displayName} disabled={isLoading}
+                   class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+          </div>
+        </div>
+
+        <div>
+          <label for="email" class="block text-sm font-medium text-gray-700"> Email address </label>
+          <div class="mt-1">
+            <input id="email" name="email" type="email" autocomplete="email" required bind:value={email} disabled={isLoading}
+                   class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+          </div>
+        </div>
+
+        <div>
+          <label for="password" class="block text-sm font-medium text-gray-700"> Password </label>
+          <div class="mt-1">
+            <input id="password" name="password" type="password" autocomplete="new-password" required bind:value={password} disabled={isLoading}
+                   class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+          </div>
+        </div>
+
+        {#if errorMessage}
+          <p class="text-sm text-red-600 text-center">{errorMessage}</p>
+        {/if}
+
+        <div class="text-sm text-center">
+          <a href="/login" class="font-medium text-indigo-600 hover:text-indigo-500"> Already have an account? Sign in. </a>
+        </div>
+
+        <div>
+          <button type="submit" disabled={isLoading}
+                  class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50">
+            {#if isLoading}Creating Account...{:else}Create Account{/if}
+          </button>
+        </div>
+      </form>
     </div>
-    <form class="mt-8 space-y-6" on:submit|preventDefault={handleSignUp}>
-      <div class="rounded-md shadow-sm -space-y-px">
-        <div>
-          <label for="displayName" class="sr-only">Display Name</label>
-          <input id="displayName" name="displayName" type="text" bind:value={displayName} required
-                 class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                 placeholder="Display Name">
-        </div>
-        <div>
-          <label for="email-address" class="sr-only">Email address</label>
-          <input id="email-address" name="email" type="email" bind:value={email} required
-                 class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                 placeholder="Email address">
-        </div>
-        <div>
-          <label for="password" class="sr-only">Password</label>
-          <input id="password" name="password" type="password" bind:value={password} required
-                 class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                 placeholder="Password (min. 6 characters)">
-        </div>
-      </div>
-
-      {#if errorMessage}
-        <p class="mt-2 text-center text-sm text-red-600">
-          {errorMessage}
-        </p>
-      {/if}
-
-      <div>
-        <button type="submit" disabled={isLoading}
-                class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50">
-          {#if isLoading}
-            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            Creating account...
-          {:else}
-            Sign up
-          {/if}
-        </button>
-      </div>
-    </form>
-    <p class="mt-2 text-center text-sm text-gray-600">
-      Already have an account?
-      <a href="/login" class="font-medium text-indigo-600 hover:text-indigo-500">
-        Sign in
-      </a>
-    </p>
   </div>
 </div>

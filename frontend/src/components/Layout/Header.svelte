@@ -72,7 +72,7 @@
             Welcome, {($user as UserStoreValue).user?.displayName || ($user as UserStoreValue).user?.email}
           </span>
           <button
-            on:click={handleSignOut}
+            onclick={handleSignOut}
             class="px-4 py-2 bg-red-500 text-white text-sm font-medium rounded-md hover:bg-red-600 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2">
             Sign Out
           </button>

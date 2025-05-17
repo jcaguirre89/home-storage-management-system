@@ -136,7 +136,6 @@ def _register_logic(req: https_fn.Request) -> https_fn.Response:
             display_name=display_name
         )
 
-        # Create user document in Firestore
         user_data = {
             "email": user_record.email,
             "displayName": user_record.display_name if user_record.display_name else "",
@@ -149,7 +148,9 @@ def _register_logic(req: https_fn.Request) -> https_fn.Response:
         else:
             user_data["householdId"] = None # Explicitly set to None if not provided
 
-        db.collection("users").document(user_record.uid).set(user_data)
+        # create user document in firestore
+        user_ref = db.collection("users").document(user_record.uid)
+        user_ref.set(user_data)
 
         # For security, don't return password or full user_record unless necessary.
         # The tech design doc does not specify returning a JWT on register, only on login.

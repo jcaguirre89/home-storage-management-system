@@ -3,6 +3,7 @@
   import { user } from '../../../stores/auth'; // Import user store
   import { householdStore } from '../../../stores/household';
   import { createHousehold } from '../../../services/api';
+  import { get } from 'svelte/store'; // Added for Svelte 5 compatibility with Svelte 4 stores
 
   // Define a simple user type for better type checking
   type AppUser = {
@@ -32,28 +33,37 @@
     // Add other fields as defined in your householdStore initialHouseholdState
   };
 
-  let householdName = '';
-  let isLoading = false;
-  let errorMessage = '';
+  let householdName = $state(''); // Refactored to $state
+  let isLoading = $state(false); // Refactored to $state
+  let errorMessage = $state(''); // Refactored to $state
 
-  // Explicitly type $user based on the store structure
-  let currentUserData: UserStoreData;
-  user.subscribe(($userStoreVal) => {
-    currentUserData = $userStoreVal as UserStoreData; // Cast to defined type
-    if (currentUserData && !currentUserData.loading && currentUserData.user && currentUserData.user.householdId) {
-      goto('/dashboard');
-    } else if (currentUserData && !currentUserData.loading && !currentUserData.user) {
-      goto('/login');
-    }
+  // Explicitly type and initialize with $state and get()
+  let currentUserData = $state(get(user) as UserStoreData);
+  let currentHouseholdData = $state(get(householdStore) as HouseholdStoreData);
+
+  $effect(() => {
+    const userUnsubscribe = user.subscribe(($userStoreVal) => {
+      currentUserData = $userStoreVal as UserStoreData; // Update $state variable
+      if (currentUserData && !currentUserData.loading && currentUserData.user && currentUserData.user.householdId) {
+        goto('/dashboard');
+      } else if (currentUserData && !currentUserData.loading && !currentUserData.user) {
+        goto('/login');
+      }
+    });
+
+    const householdUnsubscribe = householdStore.subscribe(($householdStoreVal) => {
+      currentHouseholdData = $householdStoreVal as HouseholdStoreData; // Update $state variable
+    });
+
+    // Cleanup function to unsubscribe when the component is destroyed
+    return () => {
+      userUnsubscribe();
+      householdUnsubscribe();
+    };
   });
 
-  // Explicitly type $householdStore for template access
-  let currentHouseholdData: HouseholdStoreData;
-  householdStore.subscribe(($householdStoreVal) => {
-    currentHouseholdData = $householdStoreVal as HouseholdStoreData;
-  });
-
-  async function handleCreateHousehold() {
+  async function handleCreateHousehold(event: Event) {
+    event.preventDefault();
     if (!householdName.trim()) {
       errorMessage = 'Household name cannot be empty.';
       return;
@@ -98,7 +108,7 @@
     <p class="mb-4 text-gray-700">
       Welcome! To get started, please create a household. This will allow you to manage your stored items.
     </p>
-    <form on:submit|preventDefault={handleCreateHousehold} class="space-y-4">
+    <form onsubmit={handleCreateHousehold} class="space-y-4">
       <div>
         <label for="householdName" class="block text-sm font-medium text-gray-700">Household Name:</label>
         <input

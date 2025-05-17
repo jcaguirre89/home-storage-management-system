@@ -1,6 +1,21 @@
-<script>
+<script lang="ts">
   import { user } from '../../../stores/auth'; // Adjusted path due to (app) group
   import { goto } from '$app/navigation';
+
+  // Define type for the user store's value (consistent with other files)
+  type AppUser = {
+    uid: string;
+    email: string | null;
+    emailVerified: boolean;
+    displayName: string | null;
+    householdId: string | null;
+  };
+  type UserStoreValue = {
+    user: AppUser | null;
+    loading: boolean;
+    error: Error | null;
+    profile: Record<string, any> | null;
+  };
 
   const handleSignOut = async () => {
     await user.signOut();
@@ -12,7 +27,7 @@
   <div class="flex justify-between items-center">
     <h1 class="text-3xl font-bold text-gray-800">Dashboard</h1>
     <button
-      on:click={handleSignOut}
+      onclick={handleSignOut}
       class="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition duration-150 ease-in-out">
       Sign Out
     </button>
@@ -20,7 +35,7 @@
 
   <div class="bg-white shadow-md rounded-lg p-6">
     <p class="text-gray-700">
-      Welcome to your dashboard, {$user.user?.displayName || $user.user?.email}!
+      Welcome to your dashboard, {($user as UserStoreValue).user?.displayName || ($user as UserStoreValue).user?.email}!
     </p>
     <p class="mt-4 text-gray-600">
       This is where you'll see your storage grid and manage your items.
