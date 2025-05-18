@@ -1,16 +1,21 @@
 <script>
-  import { user } from '../stores/auth'; // Path relative to src/routes
+  import { user } from '../stores/auth';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
 
   onMount(() => {
-    const unsubscribe = user.subscribe(authStore => {
+    /**
+	   * @type {import("svelte/store").Unsubscriber}
+	   */
+    let unsubscribe;
+    unsubscribe = user.subscribe(authStore => {
       if (!authStore.loading) {
         if (authStore.user) {
           goto('/dashboard');
         } else {
           goto('/login');
         }
+        // Now unsubscribe is fully initialized when we call it
         unsubscribe();
       }
     });

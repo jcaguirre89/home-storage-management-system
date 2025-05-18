@@ -1,0 +1,15 @@
+{
+  "name": "home-storage-system-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "firebase": "firebase",
+    "emulators:start": "firebase emulators:start --import=./firebase-emulator-data --export-on-exit",
+    "emulators:exec:rules": "firebase emulators:exec \"npm run test:rules:ci --prefix frontend\"",
+    "emulators:exec:all": "firebase emulators:exec \"npm run test:integration:ci --prefix frontend\"",
+    "test:rules:manual": "cd frontend && npm run test:rules"
+  },
+  "devDependencies": {
+    "firebase-tools": "^13.13.2"
+  }
+}

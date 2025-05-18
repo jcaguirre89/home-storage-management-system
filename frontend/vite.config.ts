@@ -37,7 +37,25 @@ export default defineConfig({
 					clearMocks: true,
 					include: ['src/**/*.svelte.{test,spec}.{js,ts}'],
 					exclude: ['src/lib/server/**'],
-					setupFiles: ['./vitest-setup-client.ts']
+					setupFiles: ['./vitest-setup-client.ts'],
+					coverage: {
+						provider: 'c8',
+						reporter: ['text', 'json', 'html'],
+						reportsDirectory: './coverage',
+						include: ['src/**/*.{js,ts,svelte}'],
+						exclude: [
+							'src/**/*.test.{js,ts}',
+							'src/**/*.spec.{js,ts}',
+							'src/tests/**',
+							'src/main.ts',
+							'src/app.html',
+							'src/vite-env.d.ts',
+							'src/routes/**/+page.svelte',
+							'src/routes/**/+layout.svelte',
+							'src/routes/**/+server.js',
+							'src/hooks.server.ts'
+						]
+					}
 				}
 			},
 			{
@@ -45,7 +63,7 @@ export default defineConfig({
 				test: {
 					name: 'server',
 					environment: 'node',
-					include: ['src/**/*.{test,spec}.{js,ts}'],
+					include: ['src/**/*.{test,spec}.{js,ts}', 'src/tests/**/*.test.ts'],
 					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}']
 				}
 			}

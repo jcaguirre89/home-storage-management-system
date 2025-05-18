@@ -633,3 +633,8 @@ def api(req: https_fn.Request) -> https_fn.Response:
         mimetype="application/json"
     )
 
+@https_fn.on_request()
+def test_ping(req: https_fn.Request) -> https_fn.Response:
+    """A simple test endpoint that returns a JSON response."""
+    return https_fn.Response(response=json.dumps({"message": "pong"}), status=200, headers={"Content-Type": "application/json"})
+
