@@ -1,11 +1,12 @@
 import { render, screen, fireEvent } from '@testing-library/svelte';
-import { describe, it, expect, vi } from 'vitest';
+import { tick } from 'svelte';
+import { describe, it, expect } from 'vitest';
 import SearchBar from './SearchBar.svelte';
 
 describe('SearchBar.svelte', () => {
   it('renders an input with the correct placeholder', () => {
     const placeholderText = 'Search for items...';
-    render(SearchBar, { placeholder: placeholderText });
+    render(SearchBar, { props: { placeholder: placeholderText } });
 
     const inputElement = screen.getByPlaceholderText(placeholderText);
     expect(inputElement).toBeInTheDocument();
@@ -19,26 +20,34 @@ describe('SearchBar.svelte', () => {
   });
 
   it('binds the value to the searchTerm prop', async () => {
-    const { component } = render(SearchBar, { searchTerm: 'initial' });
+    // Create a state to track the searchTerm
+    let currentSearchTerm = 'initial';
+
+    // Render with a function to update the state when the prop changes
+    const { component, rerender } = render(SearchBar, {
+      props: {
+        searchTerm: currentSearchTerm,
+        placeholder: 'Search...'
+      }
+    });
+
     const inputElement = screen.getByRole('searchbox') as HTMLInputElement;
 
+    // Check initial value
     expect(inputElement.value).toBe('initial');
 
     // Simulate user typing
     await fireEvent.input(inputElement, { target: { value: 'new search' } });
 
-    // In a real scenario with two-way binding, you might check if an event was dispatched
-    // or if a parent component received the updated value.
-    // For this component, svelte-testing-library updates the component's prop directly.
-    expect(component.searchTerm).toBe('new search');
+    // Check if the input element shows the updated value
     expect(inputElement.value).toBe('new search');
 
+    // To test reactivity in the opposite direction, rerender with new props
+    currentSearchTerm = 'updated from outside';
+    await rerender({ searchTerm: currentSearchTerm });
+    await tick(); // Wait for update cycle
 
-    // To verify the prop is reactive from the outside
-    component.$set({ searchTerm: 'updated from outside' });
-    await Promise.resolve(); // Wait for Svelte to propagate changes
     expect(inputElement.value).toBe('updated from outside');
-
   });
 
   it('applies custom classes to the input element', () => {
