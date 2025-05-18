@@ -5,18 +5,18 @@
 
   const dispatch = createEventDispatcher();
 
-  let showEditModal = false;
-  let showDeleteConfirm = false;
+  let showEditModal = $state(false);
+  let showDeleteConfirm = $state(false);
 
   // Form fields for editing
-  let editName = item.name;
-  let editLocation = item.location;
-  let editStatus = item.status;
-  let editIsPrivate = item.isPrivate;
-  let editCategory = item.metadata?.category || '';
-  let editNotes = item.metadata?.notes || '';
-  let editFormError = '';
-  let editFormLoading = false;
+  let editName = $state(item.name);
+  let editLocation = $state(item.location);
+  let editStatus = $state(item.status);
+  let editIsPrivate = $state(item.isPrivate);
+  let editCategory = $state(item.metadata?.category || '');
+  let editNotes = $state(item.metadata?.notes || '');
+  let editFormError = $state('');
+  let editFormLoading = $state(false);
   let deleteLoading = $state(false);
   let deleteError = $state('');
 
@@ -77,19 +77,11 @@
   // Helper to format timestamp if it exists
   const formatDate = (timestamp: any) => {
     if (!timestamp) return 'N/A';
-    // Firestore Timestamps might be objects or ISO strings depending on how they are fetched/processed
     if (timestamp.toDate) return timestamp.toDate().toLocaleDateString(); // Firebase Timestamp object
+    if (timestamp instanceof Date) return timestamp.toLocaleDateString(); // Standard Date object
     if (typeof timestamp === 'string') return new Date(timestamp).toLocaleDateString();
     return 'Invalid Date';
   };
-
-  function timeAgo(timestamp: any): string {
-    if (!timestamp) return 'Unknown date';
-    // Firestore Timestamps might be objects or ISO strings depending on how they are fetched/processed
-    if (timestamp.toDate) return timestamp.toDate().toLocaleDateString(); // Firebase Timestamp object
-    if (typeof timestamp === 'string') return new Date(timestamp).toLocaleDateString();
-    return 'Invalid Date';
-  }
 </script>
 
 <div class="bg-white shadow-lg rounded-xl overflow-hidden flex flex-col">
