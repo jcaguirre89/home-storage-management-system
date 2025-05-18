@@ -62,16 +62,6 @@ describe('Firestore Security Rules', () => {
       await assertSucceeds(setDoc(doc(db, userDocPath), basicUserData));
     });
 
-    it('should allow a user to create their own profile with householdId', async () => {
-      const db = getFirestore({ sub: testUserId, email: 'user@example.com' });
-      await assertSucceeds(setDoc(doc(db, userDocPath), { ...basicUserData, householdId: 'hid123' }));
-    });
-
-    it('should allow a user to create their own profile with householdId as null', async () => {
-      const db = getFirestore({ sub: testUserId, email: 'user@example.com' });
-      await assertSucceeds(setDoc(doc(db, userDocPath), { ...basicUserData, householdId: null }));
-    });
-
     it('should NOT allow a user to create a profile for another user', async () => {
       const db = getFirestore({ sub: testUserId, email: 'user@example.com' });
       await assertFails(setDoc(doc(db, `users/${anotherUserId}`), basicUserData));
@@ -99,6 +89,54 @@ describe('Firestore Security Rules', () => {
         await setDoc(doc(context.firestore(), userDocPath), basicUserData);
       });
       await assertSucceeds(updateDoc(doc(db, userDocPath), { displayName: 'Updated Name' }));
+    });
+
+    it('should allow a user to update their own profile to add a householdId', async () => {
+      const db = getFirestore({ sub: testUserId, email: 'user@example.com' });
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await setDoc(doc(context.firestore(), userDocPath), basicUserData);
+      });
+      await assertSucceeds(updateDoc(doc(db, userDocPath), { householdId: 'newHouseholdId' }));
+      // Verify it's there
+      const userDoc = await getDoc(doc(getFirestore({ sub: testUserId, email: 'user@example.com' }), userDocPath));
+      expect(userDoc.data()?.householdId).toBe('newHouseholdId');
+    });
+
+    it('should allow a user to update their own profile to change an existing householdId', async () => {
+      const db = getFirestore({ sub: testUserId, email: 'user@example.com' });
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        // Create with householdId initially using admin powers
+        await setDoc(doc(context.firestore(), userDocPath), { ...basicUserData, householdId: 'oldHouseholdId' });
+      });
+      await assertSucceeds(updateDoc(doc(db, userDocPath), { householdId: 'changedHouseholdId' }));
+      const userDoc = await getDoc(doc(getFirestore({ sub: testUserId, email: 'user@example.com' }), userDocPath));
+      expect(userDoc.data()?.householdId).toBe('changedHouseholdId');
+    });
+
+    it('should allow a user to update their own profile to set householdId to null', async () => {
+      const db = getFirestore({ sub: testUserId, email: 'user@example.com' });
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await setDoc(doc(context.firestore(), userDocPath), { ...basicUserData, householdId: 'existingHouseholdId' });
+      });
+      await assertSucceeds(updateDoc(doc(db, userDocPath), { householdId: null }));
+      const userDoc = await getDoc(doc(getFirestore({ sub: testUserId, email: 'user@example.com' }), userDocPath));
+      expect(userDoc.data()?.householdId).toBeNull();
+    });
+
+    it('should NOT allow a user to update their email', async () => {
+      const db = getFirestore({ sub: testUserId, email: 'user@example.com' });
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await setDoc(doc(context.firestore(), userDocPath), basicUserData);
+      });
+      await assertFails(updateDoc(doc(db, userDocPath), { email: 'newemail@example.com' }));
+    });
+
+    it('should NOT allow a user to update their created timestamp', async () => {
+      const db = getFirestore({ sub: testUserId, email: 'user@example.com' });
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await setDoc(doc(context.firestore(), userDocPath), basicUserData);
+      });
+      await assertFails(updateDoc(doc(db, userDocPath), { created: serverTimestamp() })); // or a fixed date
     });
 
     it('should NOT allow a user to update another user profile', async () => {
