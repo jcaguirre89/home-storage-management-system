@@ -207,49 +207,15 @@ For errors:
 
 ## 6. Frontend Architecture
 
-### 6.1 Svelte App Structure
+### 6.1 UI Components
 
-```
-src/
-├── components/
-│   ├── Auth/
-│   │   ├── LoginForm.svelte
-│   │   └── RegisterForm.svelte
-│   ├── Items/
-│   │   ├── ItemList.svelte
-│   │   ├── ItemForm.svelte
-│   │   ├── ItemCard.svelte
-│   │   └── BulkImport.svelte
-│   ├── Household/
-│   │   ├── HouseholdSetup.svelte
-│   │   ├── HouseholdMembers.svelte
-│   │   └── HouseholdSettings.svelte
-│   └── Layout/
-│       ├── Header.svelte
-│       ├── Footer.svelte
-│       └── Navigation.svelte
-├── routes/
-│   ├── index.svelte
-│   ├── login.svelte
-│   ├── register.svelte
-│   ├── dashboard.svelte
-│   ├── items/
-│   │   ├── index.svelte
-│   │   └── [id].svelte
-│   └── household/
-│       ├── index.svelte
-│       └── setup.svelte
-├── stores/
-│   ├── auth.js
-│   ├── items.js
-│   └── household.js
-├── services/
-│   ├── api.js
-│   └── firebase.js
-└── App.svelte
-```
+#### Login View
+- Login form with email/password input
+- Forgot password link
+- Sign up link
 
-### 6.2 UI Components
+#### Register View
+- Registration form with email/password input
 
 #### Dashboard View
 - Storage grid visualization (A1-D4)
@@ -274,22 +240,29 @@ src/
 - Storage status toggle
 - Edit/Delete controls are conditional based on user's permissions (creator of private item, or member of household for public items)
 
-#### User Profile/Settings View (Implied - to be added if not already planned)
-- Manage user display name
-- View current `householdId`
-- Option to leave household (might require backend logic for cleanup or ownership transfer if owner)
+#### Household Management View
+- Main Household Page:
+    - Modal prompts users with no household to create a new household or enter an invite code/ID to join an existing one
+    - Allows household owner to change household name
+    - Displays household ID (potentially for inviting others)
 
-#### Household Management View (New Section)
-- **Household Setup/Join Page (`routes/household/setup.svelte`):**
-    - Prompts new users (or users not yet in a household) to create a new household or enter an invite code/ID to join an existing one
-- **Main Household Page (`routes/household/index.svelte`):
-    - `HouseholdSettings.svelte` component:
-        - Allows household owner to change household name
-        - Displays household ID (potentially for inviting others)
-    - `HouseholdMembers.svelte` component:
-        - Lists members of the current household
-        - If user is owner, allows removing members (requires backend logic)
-        - If user is owner, potentially an option to generate invite codes/links (requires backend logic)
+### 6.2 UX Flows
+#### Onboarding Flow for new users
+1. User clicks "Sign Up" on the login page
+2. User is redirected to the registration page
+3. User fills out registration form with email/password
+4. User clicks "Sign Up"
+5. They are redirected to the household setup page
+6. User is prompted to create a new household or enter an invite code/ID to join an existing one
+7. They are redirected to the dashboard page
+
+#### Item Management Flow
+1. User clicks "Dasboard" in the navigation menu
+2. User is redirected to the items management dashboard page
+3. User can view all items in the household (unless they are private for a different user)
+4. User can add, edit, delete a new item
+5. User can see filter options for items (e.g. by location, status, category, etc.)
+6. User can see details of an item by clicking on it, which opens a modal with the item details
 
 ## 7. Security Implementation
 
@@ -318,152 +291,9 @@ A more detailed ruleset will be implemented in `firestore.rules`.
 **Google Assistant and Service Account Access:**
 Interactions via Google Assistant are processed by Firebase Functions, which utilize a Firebase service account. This service account has elevated privileges and is not subject to the same `request.auth.uid`-based security rules that apply to end-users interacting via the web UI. The Firebase Functions themselves will contain the logic to determine data access and modification rights for voice commands, effectively acting as a trusted backend service.
 
-Firestore security rules:
 
-```
-service cloud.firestore {
-  match /databases/{database}/documents {
 
-    // Helper function to get user's data (including householdId)
-    function getUserData(userId) {
-      return get(/databases/$(database)/documents/users/$(userId)).data;
-    }
-
-    // Default: Deny all access unless explicitly allowed.
-    // Users must be authenticated for any operation.
-    match /{document=**} {
-      allow read, write: if request.auth != null;
-    }
-
-    // Users collection:
-    match /users/{userId} {
-      allow read, update: if request.auth.uid == userId;
-      // Allow user to create their own profile. householdId is optional and can be null.
-      allow create: if request.auth.uid == userId &&
-                       (request.resource.data.keys().hasOnly(['email', 'displayName', 'created', 'lastLogin', 'householdId']) ||
-                        request.resource.data.keys().hasOnly(['email', 'displayName', 'created', 'lastLogin'])) &&
-                       (request.resource.data.householdId == null || request.resource.data.householdId is string);
-    }
-
-    // Items collection:
-    match /items/{itemId} {
-      allow read: if request.auth != null &&
-                       (resource.data.isPrivate == true && request.auth.uid == resource.data.creatorUserId) ||
-                       (resource.data.isPrivate == false && getUserData(request.auth.uid).householdId == resource.data.householdId);
-
-      allow create: if request.auth != null &&
-                       request.resource.data.creatorUserId == request.auth.uid &&
-                       request.resource.data.householdId == getUserData(request.auth.uid).householdId &&
-                       request.resource.data.isPrivate is bool; // Ensure isPrivate is explicitly set
-
-      allow update: if request.auth != null &&
-                       // Check ownership/household membership
-                       ((resource.data.isPrivate == true && request.auth.uid == resource.data.creatorUserId) ||
-                        (resource.data.isPrivate == false && getUserData(request.auth.uid).householdId == resource.data.householdId)) &&
-                       // Prevent changing critical fields like creator or household on update
-                       request.resource.data.creatorUserId == resource.data.creatorUserId &&
-                       request.resource.data.householdId == resource.data.householdId;
-
-      allow delete: if request.auth != null &&
-                       (resource.data.isPrivate == true && request.auth.uid == resource.data.creatorUserId) ||
-                       (resource.data.isPrivate == false && getUserData(request.auth.uid).householdId == resource.data.householdId);
-    }
-
-    // Households collection (example rules):
-    match /households/{householdId} {
-      // Allow members to read their household document
-      allow read: if request.auth != null && getUserData(request.auth.uid).householdId == householdId && resource.data.memberUserIds.hasAny([request.auth.uid]);
-      // Allow authenticated user to create a household if they don't already belong to one.
-      // The function will set ownerUserId and memberUserIds.
-      allow create: if request.auth != null &&
-                       getUserData(request.auth.uid).householdId == null &&
-                       request.resource.data.ownerUserId == request.auth.uid &&
-                       request.resource.data.memberUserIds.size() == 1 &&
-                       request.resource.data.memberUserIds[0] == request.auth.uid &&
-                       request.resource.data.name is string;
-      // Allow owner to update the household name.
-      // Managing members (add/remove) might need more specific rules or dedicated functions if complex.
-      allow update: if request.auth != null &&
-                       request.auth.uid == resource.data.ownerUserId &&
-                       request.resource.data.keys().hasOnly(['name', 'ownerUserId', 'memberUserIds', 'created']) && // Prevent changing owner/members arbitrarily here
-                       request.resource.data.ownerUserId == resource.data.ownerUserId &&
-                       request.resource.data.memberUserIds == resource.data.memberUserIds; // Simplistic: owner/members not changed by this rule
-      // Deleting households might be restricted to owners and could have cascading effects (orphaned items if not handled)
-      // allow delete: if request.auth != null && request.auth.uid == resource.data.ownerUserId;
-    }
-  }
-}
-```
-
-## 8. Deployment Strategy
-
-### 8.1 Firebase Setup
-
-1. Create new Firebase project
-2. Enable Firestore database
-3. Configure Firebase Authentication (email/password)
-4. Deploy Firebase Functions for API
-5. Set up Firebase Hosting for web app (optional)
-
-### 8.2 Dialogflow Deployment
-
-1. Create new Dialogflow agent
-2. Configure intents and entities
-3. Link to Google Assistant
-4. Set fulfillment webhook to Firebase Function endpoint
-
-### 8.3 Web App Deployment
-
-Option 1: Firebase Hosting
-- Integrated with other Firebase services
-- Free tier includes hosting with custom domain
-
-Option 2: Vercel/Netlify
-- Simple GitHub integration
-- Free tier sufficient for single-user app
-- Better performance at edge locations
-
-## 9. CSV Import Format
-
-The bulk import feature supports CSV files with the following format:
-
-```
-name,location,status,category,notes
-"Microphone Stand","A2","STORED","Music Equipment","Black stand with boom arm"
-"Drill","B3","STORED","Tools","DeWalt cordless"
-"Holiday Lights","C1","OUT","Seasonal","LED string lights"
-```
-
-Required columns:
-- `name`: Item name (text)
-- `location`: Grid location A1-D4 (text)
-- `status`: STORED or OUT (text)
-
-Optional columns:
-- `category`: Item category (text)
-- `notes`: Additional information (text)
-- Any other columns will be stored in the metadata object
-
-## 10. Testing Strategy
-
-### 10.1 Backend Testing
-
-- Unit tests for Firebase Functions
-- Integration tests for Firestore operations
-- Webhook tests for Dialogflow integration
-
-### 10.2 Frontend Testing
-
-- Component tests for Svelte components
-- End-to-end tests for critical user flows
-- Accessibility testing
-
-### 10.3 Voice Interface Testing
-
-- Dialogflow console testing
-- Real-world Google Assistant testing
-
-## 11. Cost Analysis
+## 8. Cost Analysis
 
 Based on free tier limits and expected single-user usage:
 
@@ -479,7 +309,7 @@ Based on free tier limits and expected single-user usage:
 
 **Total Expected Monthly Cost**: $0 (within free tier limits)
 
-## 12. Future Enhancements
+## 9. Future Enhancements
 
 - Item categories and tagging
 - Image uploads for items
