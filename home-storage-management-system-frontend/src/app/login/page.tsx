@@ -3,18 +3,28 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../../lib/firebase/config'; // Adjusted path
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement actual Firebase login
-    console.log('Login attempt with:', email, password);
-    // Simulate successful login
-    router.push('/dashboard');
+    setError(null);
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      // User is signed in. AuthProvider will detect this.
+      // RootPage should redirect to /dashboard automatically.
+      // Explicit push can be kept as a fallback or if specific immediate navigation is needed.
+      router.push('/dashboard');
+    } catch (err: any) {
+      console.error("Login error:", err);
+      setError(err.message || 'Failed to login. Please check your credentials.');
+    }
   };
 
   return (
@@ -43,6 +53,7 @@ export default function LoginPage() {
             style={{ width: '100%', padding: '0.5rem' }}
           />
         </div>
+        {error && <p style={{ color: 'red' }}>{error}</p>}
         <button type="submit" style={{ padding: '0.75rem', backgroundColor: 'blue', color: 'white', border: 'none', cursor: 'pointer' }}>
           Sign In
         </button>
