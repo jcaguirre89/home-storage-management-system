@@ -25,7 +25,29 @@ This checklist breaks down the development process into focused phases with clea
 
 **Implementation Tip:** Start with the Firebase Local Emulator Suite to develop offline, saving costs and speeding up development cycles.
 
-## Phase 2: Voice Interface Integration (Week 2)
+
+## Phase 2: Minimal Frontend (Week 3)
+
+**Goal: Create functional web interface for manual operations**
+
+- [ ] Initialize Svelte project
+- [ ] Configure Firebase client SDK connection
+- [ ] Create authentication store and login page
+- [ ] Implement protected routes using simple auth guards
+- [ ] Build minimal dashboard showing item list
+- [ ] Create basic item creation form
+- [ ] Add item editing functionality
+- [ ] Implement item deletion with confirmation
+- [ ] Develop simple search functionality
+- [ ] Test full CRUD cycle through the web interface
+- [ ] Verify data consistency between voice and web interfaces
+
+**Success Criteria:** You can perform all item operations through a basic but functional web interface.
+
+**Implementation Tip:** Keep the UI minimal but functional at first - focus on connecting to your APIs and getting data flowing before adding visual polish.
+
+
+## Phase 3: Voice Interface Integration (Week 2)
 
 **Goal: Create working voice command system**
 
@@ -46,26 +68,6 @@ This checklist breaks down the development process into focused phases with clea
 **Success Criteria:** You can successfully store, locate, and remove items using voice commands through Google Assistant.
 
 **Implementation Tip:** Focus on getting one intent working fully before expanding. This validates your webhook architecture and provides immediate value.
-
-## Phase 3: Minimal Frontend (Week 3)
-
-**Goal: Create functional web interface for manual operations**
-
-- [ ] Initialize Svelte project
-- [ ] Configure Firebase client SDK connection
-- [ ] Create authentication store and login page
-- [ ] Implement protected routes using simple auth guards
-- [ ] Build minimal dashboard showing item list
-- [ ] Create basic item creation form
-- [ ] Add item editing functionality
-- [ ] Implement item deletion with confirmation
-- [ ] Develop simple search functionality
-- [ ] Test full CRUD cycle through the web interface
-- [ ] Verify data consistency between voice and web interfaces
-
-**Success Criteria:** You can perform all item operations through a basic but functional web interface.
-
-**Implementation Tip:** Keep the UI minimal but functional at first - focus on connecting to your APIs and getting data flowing before adding visual polish.
 
 ## Phase 4: Advanced Features (Week 4)
 
