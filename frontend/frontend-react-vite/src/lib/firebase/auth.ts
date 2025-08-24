@@ -19,15 +19,7 @@ export const login = (email, password): Promise<UserCredential> => {
   return signInWithEmailAndPassword(auth as Auth, email, password);
 };
 
-/**
- * Registers a new user with email and password.
- * @param email - The user's email.
- * @param password - The user's password.
- * @returns A promise that resolves with the user credential.
- */
-export const register = (email, password): Promise<UserCredential> => {
-  return createUserWithEmailAndPassword(auth as Auth, email, password);
-};
+
 
 /**
  * Signs out the current user.

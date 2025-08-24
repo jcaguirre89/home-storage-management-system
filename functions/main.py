@@ -111,7 +111,9 @@ def _register_logic(req: https_fn.Request) -> https_fn.Response:
         data = req.get_json()
         email = data.get("email")
         password = data.get("password")
-        display_name = data.get("displayName", "No Name") # Optional display name
+        display_name = data.get("displayName")
+        if not display_name: # If displayName is not provided or is an empty string
+            display_name = email # Use email as display name
         household_id = data.get("householdId") # Now optional
 
         if not email or not password:
@@ -585,7 +587,7 @@ def _create_household_logic(req: https_fn.Request) -> https_fn.Response:
 
 
 # --- API Router Function ---
-@https_fn.on_request(max_instances=10, memory=options.MemoryOption.MB_256) # Added default options, can be adjusted
+@https_fn.on_request(max_instances=10, memory=options.MemoryOption.MB_256, cors=options.CorsOptions(cors_origins="*", cors_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])) # Added default options, can be adjusted
 def api(req: https_fn.Request) -> https_fn.Response:
     """Main API router function.
     Inspects req.path and req.method to route to the appropriate logic function.

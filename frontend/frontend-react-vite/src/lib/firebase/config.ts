@@ -1,5 +1,6 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth, connectAuthEmulator } from "firebase/auth";
+import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -13,15 +14,20 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
+const db = getFirestore(app);
 
 // Connect to emulators in development mode
 if (import.meta.env.DEV) {
   try {
     connectAuthEmulator(auth, "http://localhost:9099", { disableWarnings: true });
     console.log("Connected to Firebase AUTH emulator");
+
+    connectFirestoreEmulator(db, 'localhost', 8081);
+    console.log("Connected to FIRESTORE emulator");
+
   } catch (error) {
-    console.error("Error connecting to Firebase AUTH emulator:", error);
+    console.error("Error connecting to Firebase emulators:", error);
   }
 }
 
-export { app, auth };
+export { app, auth, db };

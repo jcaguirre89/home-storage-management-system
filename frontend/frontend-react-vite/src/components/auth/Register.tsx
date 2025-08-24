@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { register } from '../../lib/firebase/auth';
+import { register } from '../../api/auth';
 
 // This component is very similar to Login.tsx. In a real-world app,
 // you might combine them or use a shared form component.
@@ -24,13 +24,19 @@ const Register: React.FC<RegisterProps> = ({ onToggle }) => {
 
     try {
       await register(email, password);
-      // On successful registration, the onAuthStateChanged listener in App.tsx
+      // On successful registration, the user will be logged in automatically
+      // by the backend, and the onAuthStateChanged listener in App.tsx
       // will handle showing the main application content.
     } catch (err: any) {
-      if (err.code === 'auth/email-already-in-use') {
-        setError('This email address is already in use.');
+      if (err.response && err.response.data && err.response.data.error) {
+        const errorCode = err.response.data.error.code;
+        if (errorCode === 'EMAIL_ALREADY_EXISTS') {
+          setError('This email address is already in use.');
+        } else {
+          setError(err.response.data.error.message || 'Failed to register.');
+        }
       } else {
-        setError(err.message || 'Failed to register.');
+        setError(err.message || 'An unexpected error occurred.');
       }
     }
   };
