@@ -468,6 +468,48 @@ def _get_items_logic(req: https_fn.Request) -> https_fn.Response: # RENAMED from
     except Exception as e:
         return https_fn.Response(status=500, response=json.dumps({"success": False, "error": {"code": "INTERNAL_SERVER_ERROR", "message": str(e)}}), mimetype="application/json")
 
+def _get_profile_logic(req: https_fn.Request) -> https_fn.Response:
+    """Gets the authenticated user's profile data from Firestore.
+
+    Requires Authentication.
+    """
+    if req.method != "GET":
+        return https_fn.Response(
+            status=405,
+            response=json.dumps({"success": False, "error": {"code": "METHOD_NOT_ALLOWED", "message": "Method not allowed"}}),
+            mimetype="application/json"
+        )
+
+    try:
+        auth_user_uid = req.user["uid"]
+        user_profile = get_user_data_from_firestore(auth_user_uid)
+
+        if not user_profile:
+            return https_fn.Response(
+                status=404,
+                response=json.dumps({"success": False, "error": {"code": "USER_PROFILE_NOT_FOUND", "message": "User profile not found in Firestore."}}),
+                mimetype="application/json"
+            )
+
+        # Ensure timestamps are serializable if present
+        if 'created' in user_profile and hasattr(user_profile['created'], 'isoformat'):
+            user_profile['created'] = user_profile['created'].isoformat()
+        if 'lastLogin' in user_profile and hasattr(user_profile['lastLogin'], 'isoformat'):
+            user_profile['lastLogin'] = user_profile['lastLogin'].isoformat()
+
+        return https_fn.Response(
+            status=200,
+            response=json.dumps({"success": True, "data": user_profile, "error": None}),
+            mimetype="application/json"
+        )
+
+    except Exception as e:
+        return https_fn.Response(
+            status=500,
+            response=json.dumps({"success": False, "error": {"code": "INTERNAL_SERVER_ERROR", "message": str(e)}}),
+            mimetype="application/json"
+        )
+
 # @https_fn.on_request() # DECORATOR REMOVED
 # @require_auth # DECORATOR REMOVED
 def _get_item_logic(req: https_fn.Request, actual_item_id: str) -> https_fn.Response: # RENAMED and signature CHANGED
@@ -615,6 +657,9 @@ def api(req: https_fn.Request) -> https_fn.Response:
 
     if normalized_path == "/api/items" and req.method == "GET":
         return require_auth(_get_items_logic)(req)
+
+    if normalized_path == "/api/profile" and req.method == "GET":
+        return require_auth(_get_profile_logic)(req)
 
     # Handle /items/{item_id} type paths
     if normalized_path.startswith("/api/items/"):
