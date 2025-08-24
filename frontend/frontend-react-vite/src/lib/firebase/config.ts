@@ -1,9 +1,5 @@
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-
-// IMPORTANT: Create a .env file in the root of this frontend project
-// and add your Firebase project credentials.
-// See .env.example for the required variables.
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { getAuth, connectAuthEmulator } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -13,9 +9,19 @@ const firebaseConfig = {
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
-console.log(firebaseConfig)
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
 
-// Initialize Firebase Authentication and get a reference to the service
-export const auth = getAuth(app);
+// Initialize Firebase
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+const auth = getAuth(app);
+
+// Connect to emulators in development mode
+if (import.meta.env.DEV) {
+  try {
+    connectAuthEmulator(auth, "http://localhost:9099", { disableWarnings: true });
+    console.log("Connected to Firebase AUTH emulator");
+  } catch (error) {
+    console.error("Error connecting to Firebase AUTH emulator:", error);
+  }
+}
+
+export { app, auth };
