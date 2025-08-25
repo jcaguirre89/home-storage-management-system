@@ -1,13 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getItems, createItem, deleteItem } from '../../api/items';
-
-// Define the type for a single item
-interface Item {
-  id: string;
-  name: string;
-  location: string;
-  // Add other item properties as needed
-}
+import type { Item, ApiResponse } from '../../types/api';
 
 const Dashboard: React.FC = () => {
   const [items, setItems] = useState<Item[]>([]);
@@ -21,10 +14,15 @@ const Dashboard: React.FC = () => {
   const fetchItems = async () => {
     try {
       setLoading(true);
-      const fetchedItems = await getItems();
-      setItems(fetchedItems as Item[]);
-    } catch (err) {
-      setError('Failed to fetch items.');
+      const response: ApiResponse<Item[]> = await getItems();
+      if (response.success && response.data) {
+        setItems(response.data);
+      } else {
+        setError(response.error?.message || 'Failed to fetch items.');
+      }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -41,23 +39,33 @@ const Dashboard: React.FC = () => {
       return;
     }
     try {
-      await createItem({ name: newItemName, location: newItemLocation });
-      setNewItemName('');
-      setNewItemLocation('');
-      setError(null);
-      fetchItems(); // Refetch items after adding
-    } catch (err) {
-      setError('Failed to add item.');
+      const response: ApiResponse<Item> = await createItem({ name: newItemName, location: newItemLocation });
+      if (response.success) {
+        setNewItemName('');
+        setNewItemLocation('');
+        setError(null);
+        fetchItems(); // Refetch items after adding
+      } else {
+        setError(response.error?.message || 'Failed to add item.');
+      }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
+      setError(errorMessage);
     }
   };
 
   const handleDeleteItem = async (itemId: string) => {
     if (window.confirm('Are you sure you want to delete this item?')) {
       try {
-        await deleteItem(itemId);
-        fetchItems(); // Refetch items after deleting
-      } catch (err) {
-        setError('Failed to delete item.');
+        const response: ApiResponse<Record<string, never>> = await deleteItem(itemId);
+        if (response.success) {
+          fetchItems(); // Refetch items after deleting
+        } else {
+          setError(response.error?.message || 'Failed to delete item.');
+        }
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
+        setError(errorMessage);
       }
     }
   };

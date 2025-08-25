@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { createHousehold } from '../../api/households';
+import type { ApiError } from '../../types/api';
+import { AxiosError } from 'axios';
 
 interface HouseholdSetupProps {
   onHouseholdCreated: () => void;
@@ -21,11 +23,18 @@ const HouseholdSetup: React.FC<HouseholdSetupProps> = ({ onHouseholdCreated }) =
 
     setIsSubmitting(true);
     try {
-      await createHousehold(name);
-      // On success, call the callback from App.tsx to refresh the profile
-      onHouseholdCreated();
-    } catch (err: any) {
-      setError(err.message || 'Failed to create household.');
+      const response = await createHousehold(name);
+      if (response.success) {
+        // On success, call the callback from App.tsx to refresh the profile
+        onHouseholdCreated();
+      } else {
+        setError(response.error?.message || 'Failed to create household.');
+        setIsSubmitting(false);
+      }
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError;
+      const apiError = axiosError.response?.data as ApiError | undefined;
+      setError(apiError?.message || axiosError.message || 'Failed to create household.');
       setIsSubmitting(false);
     }
     // No need to set isSubmitting to false on success, as the component will unmount

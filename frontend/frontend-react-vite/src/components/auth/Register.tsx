@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { register } from '../../api/auth';
+import type { ApiResponse } from '../../types/api';
+import { AxiosError } from 'axios';
 
 // This component is very similar to Login.tsx. In a real-world app,
 // you might combine them or use a shared form component.
@@ -23,20 +25,29 @@ const Register: React.FC<RegisterProps> = ({ onToggle }) => {
     }
 
     try {
-      await register(email, password);
+      const response = await register(email, password);
+      if (!response.success) {
+        setError(response.error?.message || 'Failed to register.');
+      }
       // On successful registration, the user will be logged in automatically
       // by the backend, and the onAuthStateChanged listener in App.tsx
       // will handle showing the main application content.
-    } catch (err: any) {
-      if (err.response && err.response.data && err.response.data.error) {
-        const errorCode = err.response.data.error.code;
-        if (errorCode === 'EMAIL_ALREADY_EXISTS') {
-          setError('This email address is already in use.');
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError;
+      if (axiosError.response && axiosError.response.data) {
+        const apiResponse = axiosError.response.data as ApiResponse<unknown>;
+        if (apiResponse.error) {
+          const errorCode = apiResponse.error.code;
+          if (errorCode === 'EMAIL_ALREADY_EXISTS') {
+            setError('This email address is already in use.');
+          } else {
+            setError(apiResponse.error.message || 'Failed to register.');
+          }
         } else {
-          setError(err.response.data.error.message || 'Failed to register.');
+          setError(axiosError.message || 'An unexpected error occurred.');
         }
       } else {
-        setError(err.message || 'An unexpected error occurred.');
+        setError(axiosError.message || 'An unexpected error occurred.');
       }
     }
   };

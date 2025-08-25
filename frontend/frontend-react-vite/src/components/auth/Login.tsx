@@ -23,9 +23,10 @@ const Login: React.FC<LoginProps> = ({ onToggle }) => {
       await login(email, password);
       // On successful login, the onAuthStateChanged listener in App.tsx
       // will handle showing the main application content.
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
       // You can add more specific error handling based on Firebase error codes
-      setError(err.message || 'Failed to log in. Please check your credentials.');
+      setError(errorMessage || 'Failed to log in. Please check your credentials.');
     }
   };
 

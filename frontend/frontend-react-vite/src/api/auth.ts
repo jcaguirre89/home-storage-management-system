@@ -1,7 +1,8 @@
 import apiClient from './index';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../lib/firebase/config';
-import { type AxiosResponse } from 'axios'; // <-- Import the specific type
+import { AxiosError } from 'axios';
+import type { ApiResponse, ApiError } from '../types/api';
 
 /**
  * Calls the backend API to register a new user.
@@ -15,9 +16,22 @@ import { type AxiosResponse } from 'axios'; // <-- Import the specific type
 export const register = async (
   email: string,
   password: string
-): Promise<AxiosResponse<any>> => { // <-- Use a more specific return type
-  const response = await apiClient.post('/api/register', { email, password });
-  // After successful backend registration, sign the user in client-side
-  await signInWithEmailAndPassword(auth, email, password);
-  return response;
+): Promise<ApiResponse<Record<string, never>>> => {
+  try {
+    const response = await apiClient.post<ApiResponse<Record<string, never>>>('/api/register', { email, password });
+    // After successful backend registration, sign the user in client-side
+    await signInWithEmailAndPassword(auth, email, password);
+    return response.data;
+  } catch (error: unknown) {
+    const axiosError = error as AxiosError;
+    const apiError = axiosError.response?.data as ApiError | undefined;
+    return {
+      success: false,
+      data: null,
+      error: {
+        code: apiError?.code || 'UNKNOWN_ERROR',
+        message: apiError?.message || axiosError.message,
+      },
+    };
+  }
 };
