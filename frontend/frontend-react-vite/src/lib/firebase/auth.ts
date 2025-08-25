@@ -1,11 +1,10 @@
-import { 
+import {
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
   signOut,
   type Auth,
   type UserCredential
 } from 'firebase/auth';
-import { auth } from './config'; // Assuming auth is exported from config
+import { auth } from './config';
 
 // Note: We will expand these functions to include error handling.
 
@@ -15,11 +14,9 @@ import { auth } from './config'; // Assuming auth is exported from config
  * @param password - The user's password.
  * @returns A promise that resolves with the user credential.
  */
-export const login = (email, password): Promise<UserCredential> => {
+export const login = (email: string, password: string): Promise<UserCredential> => {
   return signInWithEmailAndPassword(auth as Auth, email, password);
 };
-
-
 
 /**
  * Signs out the current user.
