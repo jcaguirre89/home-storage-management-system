@@ -11,6 +11,9 @@ const Dashboard: React.FC = () => {
   const [newItemName, setNewItemName] = useState('');
   const [newItemLocation, setNewItemLocation] = useState('');
 
+  // Regex for location validation (e.g., A1, B5)
+  const locationRegex = /^[A-Z][1-9]$/;
+
   const fetchItems = async () => {
     try {
       setLoading(true);
@@ -36,6 +39,11 @@ const Dashboard: React.FC = () => {
     event.preventDefault();
     if (!newItemName || !newItemLocation) {
       setError('Please provide a name and location.');
+      return;
+    }
+
+    if (!locationRegex.test(newItemLocation)) {
+      setError('Location must be a capital letter followed by a digit 1-9 (e.g., A1, B5).');
       return;
     }
     try {

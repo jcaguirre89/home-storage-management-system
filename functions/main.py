@@ -7,6 +7,7 @@ from firebase_admin import credentials, auth, firestore
 import firebase_admin
 import json # Import for json.dumps if needed, or direct dict passing
 import functools # Added for wrapper
+import re # Import for regular expressions
 
 # Initialize Firebase Admin SDK
 # Make sure to replace 'path/to/your/serviceAccountKey.json' with the actual path to your service account key
@@ -262,6 +263,10 @@ def _create_item_logic(req: https_fn.Request) -> https_fn.Response: # RENAMED
         if not name or not location:
             return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "MISSING_FIELDS", "message": "'name' and 'location' are required."}}), mimetype="application/json")
 
+        # Validate location format
+        if not re.fullmatch(r"^[A-Z][1-9]$", location):
+            return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "INVALID_LOCATION_FORMAT", "message": "Location must be a capital letter followed by a digit 1-9 (e.g., A1, B5)."}}), mimetype="application/json")
+
         if status not in ["STORED", "OUT"]:
             return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "INVALID_STATUS", "message": "'status' must be either 'STORED' or 'OUT'."}}), mimetype="application/json")
 
@@ -352,6 +357,8 @@ def _update_item_logic(req: https_fn.Request, actual_item_id: str) -> https_fn.R
             return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "INVALID_STATUS", "message": "'status' must be either 'STORED' or 'OUT'."}}), mimetype="application/json")
         if "isPrivate" in update_payload and not isinstance(update_payload["isPrivate"], bool):
             return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "INVALID_ISPRIVATE", "message": "'isPrivate' must be a boolean."}}), mimetype="application/json")
+        if "location" in update_payload and not re.fullmatch(r"^[A-Z][1-9]$", update_payload["location"]):
+            return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "INVALID_LOCATION_FORMAT", "message": "Location must be a capital letter followed by a digit 1-9 (e.g., A1, B5)."}}), mimetype="application/json")
 
         if not update_payload:
              return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "NO_UPDATE_FIELDS", "message": "No valid fields provided for update."}}), mimetype="application/json")
