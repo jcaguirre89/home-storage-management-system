@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getItems, createItem, deleteItem } from '../../api/items';
+import { getItems, createItem, deleteItem, bulkImportItems } from '../../api/items';
 import type { Item, ApiResponse } from '../../types/api';
 
 const Dashboard: React.FC = () => {
@@ -10,6 +10,11 @@ const Dashboard: React.FC = () => {
   // State for the new item form
   const [newItemName, setNewItemName] = useState('');
   const [newItemLocation, setNewItemLocation] = useState('');
+
+  // State for bulk import
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [bulkImportLoading, setBulkImportLoading] = useState(false);
+  const [bulkImportError, setBulkImportError] = useState<string | null>(null);
 
   // Regex for location validation (e.g., A1, B5)
   const locationRegex = /^[A-Z][1-9]$/;
@@ -78,6 +83,32 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const handleBulkImport = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!csvFile) {
+      setBulkImportError('Please select a CSV file.');
+      return;
+    }
+
+    setBulkImportLoading(true);
+    setBulkImportError(null);
+
+    try {
+      const response = await bulkImportItems(csvFile);
+      if (response.success) {
+        setCsvFile(null);
+        fetchItems(); // Refetch items after import
+      } else {
+        setBulkImportError(response.error?.message || 'Failed to import items.');
+      }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
+      setBulkImportError(errorMessage);
+    } finally {
+      setBulkImportLoading(false);
+    }
+  };
+
   if (loading) {
     return <p className="text-white">Loading items...</p>;
   }
@@ -109,6 +140,23 @@ const Dashboard: React.FC = () => {
           </button>
         </form>
         {error && <p className="text-red-500 mt-2">{error}</p>}
+      </div>
+
+      {/* Bulk Import Form */}
+      <div className="mb-8">
+        <h3 className="text-white text-lg font-semibold mb-4">Bulk Import Items (CSV)</h3>
+        <form onSubmit={handleBulkImport} className="flex items-center gap-4">
+          <input
+            type="file"
+            accept=".csv"
+            onChange={(e) => setCsvFile(e.target.files ? e.target.files[0] : null)}
+            className="bg-gray-700 text-white rounded px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <button type="submit" className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded" disabled={bulkImportLoading}>
+            {bulkImportLoading ? 'Importing...' : 'Import'}
+          </button>
+        </form>
+        {bulkImportError && <p className="text-red-500 mt-2">{bulkImportError}</p>}
       </div>
 
       {/* Items List */}

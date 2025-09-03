@@ -93,3 +93,33 @@ export const deleteItem = async (itemId: string): Promise<ApiResponse<Record<str
     };
   }
 };
+
+/**
+ * Imports items from a CSV file.
+ * @param file - The CSV file to import.
+ * @returns A promise that resolves with the result of the import.
+ */
+export const bulkImportItems = async (file: File): Promise<ApiResponse<{ count: number }>> => {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const response = await apiClient.post<ApiResponse<{ count: number }>>('/api/items/bulk', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  } catch (error: unknown) {
+    const axiosError = error as AxiosError;
+    const apiError = axiosError.response?.data as ApiError | undefined;
+    return {
+      success: false,
+      data: null,
+      error: {
+        code: apiError?.code || 'UNKNOWN_ERROR',
+        message: apiError?.message || axiosError.message,
+      },
+    };
+  }
+};

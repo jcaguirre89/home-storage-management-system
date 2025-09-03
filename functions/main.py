@@ -8,6 +8,8 @@ import firebase_admin
 import json # Import for json.dumps if needed, or direct dict passing
 import functools # Added for wrapper
 import re # Import for regular expressions
+import csv
+import io
 
 # Initialize Firebase Admin SDK
 # Make sure to replace 'path/to/your/serviceAccountKey.json' with the actual path to your service account key
@@ -635,6 +637,73 @@ def _create_household_logic(req: https_fn.Request) -> https_fn.Response:
         return https_fn.Response(status=500, response=json.dumps({"success": False, "error": {"code": "INTERNAL_SERVER_ERROR", "message": str(e)}}), mimetype="application/json")
 
 
+def _bulk_import_items_logic(req: https_fn.Request) -> https_fn.Response:
+    """Bulk imports items from a CSV file.
+
+    Requires Authentication.
+    The file is expected to be in multipart/form-data format.
+    """
+    if req.method != "POST":
+        return https_fn.Response(status=405, response=json.dumps({"success": False, "error": {"code": "METHOD_NOT_ALLOWED", "message": "Method not allowed"}}), mimetype="application/json")
+
+    try:
+        if 'file' not in req.files:
+            return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "MISSING_FILE", "message": "No file part in the request."}}), mimetype="application/json")
+
+        file = req.files['file']
+        if file.filename == '':
+            return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "NO_FILE_SELECTED", "message": "No file selected."}}), mimetype="application/json")
+
+        auth_user_uid = req.user["uid"]
+        user_profile = get_user_data_from_firestore(auth_user_uid)
+
+        if not user_profile or not user_profile.get("householdId"):
+            return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "USER_NOT_IN_HOUSEHOLD", "message": "User must belong to a household to import items."}}), mimetype="application/json")
+
+        household_id = user_profile["householdId"]
+
+        # Decode the file content as text
+        csv_file = io.StringIO(file.read().decode('utf-8'))
+        reader = csv.DictReader(csv_file)
+
+        items_to_create = []
+        for row in reader:
+            name = row.get('name')
+            location = row.get('location')
+
+            if not name or not location:
+                # Skip rows with missing required fields
+                continue
+
+            item_data = {
+                "name": name,
+                "location": location.upper(),
+                "status": row.get('status', 'STORED').upper(),
+                "isPrivate": row.get('isPrivate', 'false').lower() == 'true',
+                "metadata": {
+                    "category": row.get('category', ''),
+                    "notes": row.get('notes', '')
+                },
+                "creatorUserId": auth_user_uid,
+                "householdId": household_id,
+                "lastUpdated": firestore.SERVER_TIMESTAMP
+            }
+            items_to_create.append(item_data)
+
+        if not items_to_create:
+            return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "NO_VALID_ITEMS", "message": "No valid items found in the CSV file."}}), mimetype="application/json")
+
+        batch = db.batch()
+        for item_data in items_to_create:
+            item_ref = db.collection("items").document()
+            batch.set(item_ref, item_data)
+        batch.commit()
+
+        return https_fn.Response(status=200, response=json.dumps({"success": True, "data": {"count": len(items_to_create)}, "error": None}), mimetype="application/json")
+
+    except Exception as e:
+        return https_fn.Response(status=500, response=json.dumps({"success": False, "error": {"code": "INTERNAL_SERVER_ERROR", "message": str(e)}}), mimetype="application/json")
+
 # --- API Router Function ---
 @https_fn.on_request(max_instances=10, memory=options.MemoryOption.MB_256, cors=options.CorsOptions(cors_origins="*", cors_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])) # Added default options, can be adjusted
 def api(req: https_fn.Request) -> https_fn.Response:
@@ -664,6 +733,9 @@ def api(req: https_fn.Request) -> https_fn.Response:
 
     if normalized_path == "/api/items" and req.method == "GET":
         return require_auth(_get_items_logic)(req)
+
+    if normalized_path == "/api/items/bulk" and req.method == "POST":
+        return require_auth(_bulk_import_items_logic)(req)
 
     if normalized_path == "/api/profile" and req.method == "GET":
         return require_auth(_get_profile_logic)(req)
