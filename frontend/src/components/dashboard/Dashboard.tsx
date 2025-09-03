@@ -110,75 +110,85 @@ const Dashboard: React.FC = () => {
   };
 
   if (loading) {
-    return <p className="text-white">Loading items...</p>;
+    return <div className="flex justify-center items-center h-screen"><span className="loading loading-lg"></span></div>;
   }
 
   return (
-    <div className="bg-gray-900 p-8 rounded-lg shadow-lg w-full max-w-4xl">
-      <h2 className="text-white text-2xl font-bold mb-6">Dashboard</h2>
-      
+    <div className="container mx-auto p-4">
+      <h2 className="text-3xl font-bold mb-6">Dashboard</h2>
+
       {/* Add Item Form */}
-      <div className="mb-8">
-        <h3 className="text-white text-lg font-semibold mb-4">Add New Item</h3>
-        <form onSubmit={handleAddItem} className="flex items-center gap-4">
-          <input
-            type="text"
-            placeholder="Item Name"
-            value={newItemName}
-            onChange={(e) => setNewItemName(e.target.value)}
-            className="bg-gray-700 text-white rounded px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <input
-            type="text"
-            placeholder="Location (e.g., A1)"
-            value={newItemLocation}
-            onChange={(e) => setNewItemLocation(e.target.value)}
-            className="bg-gray-700 text-white rounded px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-            Add
-          </button>
-        </form>
-        {error && <p className="text-red-500 mt-2">{error}</p>}
+      <div className="card bg-base-200 shadow-xl mb-8">
+        <div className="card-body">
+          <h3 className="card-title">Add New Item</h3>
+          <form onSubmit={handleAddItem} className="flex items-center gap-4">
+            <div className="form-control w-full">
+              <input
+                type="text"
+                placeholder="Item Name"
+                value={newItemName}
+                onChange={(e) => setNewItemName(e.target.value)}
+                className="input input-bordered w-full"
+              />
+            </div>
+            <div className="form-control w-full">
+              <input
+                type="text"
+                placeholder="Location (e.g., A1)"
+                value={newItemLocation}
+                onChange={(e) => setNewItemLocation(e.target.value)}
+                className="input input-bordered w-full"
+              />
+            </div>
+            <button type="submit" className="btn btn-primary">
+              Add
+            </button>
+          </form>
+          {error && <div className="alert alert-error mt-4">{error}</div>}
+        </div>
       </div>
 
       {/* Bulk Import Form */}
-      <div className="mb-8">
-        <h3 className="text-white text-lg font-semibold mb-4">Bulk Import Items (CSV)</h3>
-        <form onSubmit={handleBulkImport} className="flex items-center gap-4">
-          <input
-            type="file"
-            accept=".csv"
-            onChange={(e) => setCsvFile(e.target.files ? e.target.files[0] : null)}
-            className="bg-gray-700 text-white rounded px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <button type="submit" className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded" disabled={bulkImportLoading}>
-            {bulkImportLoading ? 'Importing...' : 'Import'}
-          </button>
-        </form>
-        {bulkImportError && <p className="text-red-500 mt-2">{bulkImportError}</p>}
+      <div className="card bg-base-200 shadow-xl mb-8">
+        <div className="card-body">
+          <h3 className="card-title">Bulk Import Items (CSV)</h3>
+          <form onSubmit={handleBulkImport} className="flex items-center gap-4">
+            <div className="form-control w-full">
+              <input
+                type="file"
+                accept=".csv"
+                onChange={(e) => setCsvFile(e.target.files ? e.target.files[0] : null)}
+                className="file-input file-input-bordered w-full"
+              />
+            </div>
+            <button type="submit" className="btn btn-secondary" disabled={bulkImportLoading}>
+              {bulkImportLoading ? <span className="loading loading-spinner"></span> : 'Import'}
+            </button>
+          </form>
+          {bulkImportError && <div className="alert alert-error mt-4">{bulkImportError}</div>}
+        </div>
       </div>
 
       {/* Items List */}
       <div>
-        <h3 className="text-white text-lg font-semibold mb-4">Stored Items</h3>
-        <div className="space-y-4">
+        <h3 className="text-2xl font-bold mb-4">Stored Items</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {items.length > 0 ? (
             items.map(item => (
-              <div key={item.id} className="bg-gray-800 p-4 rounded-lg flex justify-between items-center">
-                <div>
-                  <p className="font-bold text-white">{item.name}</p>
-                  <p className="text-gray-400 text-sm">Location: {item.location}</p>
-                </div>
-                <div>
-                  <button onClick={() => handleDeleteItem(item.id)} className="text-red-500 hover:text-red-700 font-semibold">
-                    Delete
-                  </button>
+              <div key={item.id} className="card bg-base-100 shadow-xl">
+                <div className="card-body">
+                  <h4 className="card-title">{item.name}</h4>
+                  <p>Location: {item.location}</p>
+                  <div className="card-actions justify-end">
+                    <button onClick={() => handleDeleteItem(item.id)} className="btn btn-error btn-sm">
+                      Delete
+                    </button>
+                  </div>
                 </div>
               </div>
             ))
           ) : (
-            <p className="text-gray-400">No items found. Add one above to get started!</p>
+            <p>No items found. Add one above to get started!</p>
           )}
         </div>
       </div>

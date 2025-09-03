@@ -41,36 +41,36 @@ const HouseholdSetup: React.FC<HouseholdSetupProps> = ({ onHouseholdCreated }) =
   };
 
   return (
-    <div className="bg-gray-900 p-8 rounded-lg shadow-lg w-full max-w-md">
-      <h2 className="text-white text-2xl font-bold mb-4 text-center">Welcome!</h2>
-      <p className="text-center text-gray-400 mb-6">Let's set up your household to get started.</p>
-      <form onSubmit={handleSubmit}>
-        <div className="mb-4">
-          <label className="block text-gray-400 text-sm font-bold mb-2" htmlFor="householdName">
-            Household Name
-          </label>
-          <input
-            className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-700 text-white leading-tight focus:outline-none focus:shadow-outline"
-            id="householdName"
-            type="text"
-            placeholder="e.g., The Smith Family Home"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
+    <div className="hero min-h-screen bg-base-200">
+      <div className="hero-content text-center">
+        <div className="max-w-md">
+          <h1 className="text-5xl font-bold">Welcome!</h1>
+          <p className="py-6">Let's set up your household to get started.</p>
+          <form onSubmit={handleSubmit} className="card bg-base-100 shadow-xl p-8">
+            <div className="form-control">
+              <label className="label">
+                <span className="label-text">Household Name</span>
+              </label>
+              <input
+                type="text"
+                placeholder="e.g., The Smith Family Home"
+                className="input input-bordered"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </div>
+            {error && (
+              <div className="alert alert-error mt-4">{error}</div>
+            )}
+            <div className="form-control mt-6">
+              <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+                {isSubmitting ? <span className="loading loading-spinner"></span> : 'Create Household'}
+              </button>
+            </div>
+          </form>
         </div>
-        {error && (
-          <p className="bg-red-500 text-white text-xs italic p-3 rounded mb-4">{error}</p>
-        )}
-        <div className="flex items-center justify-between">
-          <button
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full disabled:bg-gray-500"
-            type="submit"
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? 'Creating...' : 'Create Household'}
-          </button>
-        </div>
-      </form>
+      </div>
     </div>
   );
 };

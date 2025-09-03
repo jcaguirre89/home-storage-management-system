@@ -8,9 +8,12 @@ import AuthPage from './components/auth/AuthPage';
 import HouseholdSetup from './components/household/HouseholdSetup';
 import Dashboard from './components/dashboard/Dashboard';
 
+import Header from './components/layout/Header';
+
 // Define a type for our user profile data
 interface UserProfile {
   householdId: string | null;
+  displayName: string | null;
   // add other profile fields as needed
 }
 
@@ -47,7 +50,7 @@ function App() {
 
   const renderContent = () => {
     if (loading) {
-      return <h1 className="text-3xl text-white">Loading...</h1>;
+      return <span className="loading loading-dots loading-lg"></span>;
     }
 
     if (!user) {
@@ -55,7 +58,7 @@ function App() {
     }
 
     if (!userProfile) {
-      return <h1 className="text-3xl text-white">Fetching profile...</h1>;
+      return <span className="loading loading-dots loading-lg"></span>;
     }
 
     const mainContent = !userProfile.householdId
@@ -63,20 +66,26 @@ function App() {
       : <Dashboard />;
 
     return (
-      <div>
-        <button 
-          onClick={logout} 
-          className="absolute top-4 right-4 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
-        >
-          Logout
-        </button>
-        {mainContent}
+      <div className="drawer">
+        <input id="my-drawer" type="checkbox" className="drawer-toggle" />
+        <div className="drawer-content">
+          <Header />
+          {mainContent}
+        </div>
+        <div className="drawer-side">
+          <label htmlFor="my-drawer" aria-label="close sidebar" className="drawer-overlay"></label>
+          <ul className="menu p-4 w-80 min-h-full bg-base-200 text-base-content">
+            {/* Sidebar content here */}
+            <li><a>{user.displayName}</a></li>
+            <li><button onClick={logout} className="btn btn-secondary">Logout</button></li>
+          </ul>
+        </div>
       </div>
     );
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+    <div data-theme="dark" className="min-h-screen">
       {renderContent()}
     </div>
   );
