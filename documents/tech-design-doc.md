@@ -36,8 +36,8 @@ This document describes the technical architecture for a smart home storage trac
                                                    │
                                                    ▼
 ┌───────────────┐                          ┌───────────────┐
-│  Svelte Web   │◄─────────────────────────┤   Firestore   │
-│  Application  │                          │   Database    │
+│  React (Vite) │◄─────────────────────────┤   Firestore   │
+│  Web App      │                          │   Database    │
 └───────────────┘                          └───────────────┘
 ```
 
@@ -47,7 +47,7 @@ This document describes the technical architecture for a smart home storage trac
 - **Dialogflow**: Natural language processing to interpret commands
 - **Firebase Functions**: Backend logic and API endpoints
 - **Firestore**: NoSQL database for item storage
-- **Svelte Web App**: User interface for direct interaction
+- **React (Vite) Web App**: User interface for direct interaction
 
 ## 3. Data Model
 
@@ -209,60 +209,12 @@ For errors:
 
 ### 6.1 UI Components
 
-#### Login View
-- Login form with email/password input
-- Forgot password link
-- Sign up link
-
-#### Register View
-- Registration form with email/password input
-
 #### Dashboard View
-- Storage grid visualization (A1-D4)
-- Item count by location (for items visible to the user within their household)
-- Recently added/removed items (household-specific)
-- Quick search field (searches within accessible household items)
-
-#### Items Management View
-- Sortable/filterable table of all items accessible to the user (respecting household and `isPrivate` flag)
-- Status indicators (stored/out)
-- Visual indicator for `isPrivate` items
-- Edit/Delete actions (conditional based on ownership/permissions)
-- Add new item form:
-    - Includes a toggle or checkbox for `isPrivate`
-    - `householdId` and `creatorUserId` are set automatically based on the logged-in user
-- Bulk import button (imported items will be associated with the user's current household and can have a default `isPrivate` status or a column in CSV)
-
-#### Item Detail View
-- Item information, including its `isPrivate` status
-- Location history
-- Metadata editor
-- Storage status toggle
-- Edit/Delete controls are conditional based on user's permissions (creator of private item, or member of household for public items)
-
-#### Household Management View
-- Main Household Page:
-    - Modal prompts users with no household to create a new household or enter an invite code/ID to join an existing one
-    - Allows household owner to change household name
-    - Displays household ID (potentially for inviting others)
-
-### 6.2 UX Flows
-#### Onboarding Flow for new users
-1. User clicks "Sign Up" on the login page
-2. User is redirected to the registration page
-3. User fills out registration form with email/password
-4. User clicks "Sign Up"
-5. They are redirected to the household setup page
-6. User is prompted to create a new household or enter an invite code/ID to join an existing one
-7. They are redirected to the dashboard page
-
-#### Item Management Flow
-1. User clicks "Dasboard" in the navigation menu
-2. User is redirected to the items management dashboard page
-3. User can view all items in the household (unless they are private for a different user)
-4. User can add, edit, delete a new item
-5. User can see filter options for items (e.g. by location, status, category, etc.)
-6. User can see details of an item by clicking on it, which opens a modal with the item details
+- A single page application that displays the user's items.
+- Allows users to add, delete, and view items.
+- Provides a form to add a new item with name and location.
+- Includes a bulk import feature to upload a CSV file of items.
+- Displays errors to the user.
 
 ## 7. Security Implementation
 
@@ -305,7 +257,6 @@ Based on free tier limits and expected single-user usage:
 | Firebase Hosting | 10GB transfer, 1GB storage | <100MB | $0 |
 | Dialogflow | 1000 text requests/day | <50/day | $0 |
 | Google Assistant | Free | N/A | $0 |
-| Vercel/Netlify (alt) | Free tier | Single site | $0 |
 
 **Total Expected Monthly Cost**: $0 (within free tier limits)
 
