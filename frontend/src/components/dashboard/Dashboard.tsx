@@ -227,7 +227,7 @@ const RoomDetailView: React.FC<RoomDetailViewProps> = ({ room, items, onBack, on
           >
             <div className="card-body">
               <h3 className="card-title">Bin {binNumber}</h3>
-              <p>{(itemsByBin[binNumber] || []).length} items</p>
+              { (itemsByBin[binNumber] || []).length > 0 && <p>{(itemsByBin[binNumber] || []).length} items</p> }
             </div>
           </div>
         ))}
