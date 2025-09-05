@@ -1,7 +1,16 @@
+export interface Room {
+  id: string;
+  name: string;
+  nBins: number;
+}
+
 export interface Item {
   id: string;
   name: string;
-  location: string;
+  location: {
+    roomId: string;
+    binNumber: number;
+  };
   status: 'STORED' | 'OUT';
   creatorUserId: string;
   householdId: string;

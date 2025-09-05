@@ -266,8 +266,14 @@ def _create_item_logic(req: https_fn.Request) -> https_fn.Response: # RENAMED
             return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "MISSING_FIELDS", "message": "'name' and 'location' are required."}}), mimetype="application/json")
 
         # Validate location format
-        if not re.fullmatch(r"^[A-Z][1-9]$", location):
-            return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "INVALID_LOCATION_FORMAT", "message": "Location must be a capital letter followed by a digit 1-9 (e.g., A1, B5)."}}), mimetype="application/json")
+        if not isinstance(location, dict) or "roomId" not in location or "binNumber" not in location:
+            return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "INVALID_LOCATION_FORMAT", "message": "Location must be an object with 'roomId' and 'binNumber'."}}), mimetype="application/json")
+
+        room_id = location["roomId"]
+        bin_number = location["binNumber"]
+
+        if not isinstance(bin_number, int) or bin_number <= 0:
+            return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "INVALID_BIN_NUMBER", "message": "binNumber must be a positive integer."}}), mimetype="application/json")
 
         if status not in ["STORED", "OUT"]:
             return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "INVALID_STATUS", "message": "'status' must be either 'STORED' or 'OUT'."}}), mimetype="application/json")
@@ -282,6 +288,16 @@ def _create_item_logic(req: https_fn.Request) -> https_fn.Response: # RENAMED
             return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "USER_NOT_IN_HOUSEHOLD", "message": "User must belong to a household to create items."}}), mimetype="application/json")
 
         household_id = user_profile["householdId"]
+        
+        # Validate room exists and bin number is valid
+        room_ref = db.collection("households").document(household_id).collection("rooms").document(room_id)
+        room_doc = room_ref.get()
+        if not room_doc.exists:
+            return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "ROOM_NOT_FOUND", "message": "The specified room does not exist in this household."}}), mimetype="application/json")
+
+        room_data = room_doc.to_dict()
+        if bin_number > room_data.get("nBins", 0):
+            return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "BIN_NUMBER_OUT_OF_RANGE", "message": f"binNumber exceeds the number of bins available in this room ({room_data.get('nBins', 0)})."}}), mimetype="application/json")
 
         item_data = {
             "name": name,
@@ -359,8 +375,26 @@ def _update_item_logic(req: https_fn.Request, actual_item_id: str) -> https_fn.R
             return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "INVALID_STATUS", "message": "'status' must be either 'STORED' or 'OUT'."}}), mimetype="application/json")
         if "isPrivate" in update_payload and not isinstance(update_payload["isPrivate"], bool):
             return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "INVALID_ISPRIVATE", "message": "'isPrivate' must be a boolean."}}), mimetype="application/json")
-        if "location" in update_payload and not re.fullmatch(r"^[A-Z][1-9]$", update_payload["location"]):
-            return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "INVALID_LOCATION_FORMAT", "message": "Location must be a capital letter followed by a digit 1-9 (e.g., A1, B5)."}}), mimetype="application/json")
+        if "location" in update_payload:
+            location = update_payload["location"]
+            if not isinstance(location, dict) or "roomId" not in location or "binNumber" not in location:
+                return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "INVALID_LOCATION_FORMAT", "message": "Location must be an object with 'roomId' and 'binNumber'."}}), mimetype="application/json")
+
+            room_id = location["roomId"]
+            bin_number = location["binNumber"]
+
+            if not isinstance(bin_number, int) or bin_number <= 0:
+                return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "INVALID_BIN_NUMBER", "message": "binNumber must be a positive integer."}}), mimetype="application/json")
+
+            household_id = existing_item_data.get("householdId")
+            room_ref = db.collection("households").document(household_id).collection("rooms").document(room_id)
+            room_doc = room_ref.get()
+            if not room_doc.exists:
+                return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "ROOM_NOT_FOUND", "message": "The specified room does not exist in this household."}}), mimetype="application/json")
+
+            room_data = room_doc.to_dict()
+            if bin_number > room_data.get("nBins", 0):
+                return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "BIN_NUMBER_OUT_OF_RANGE", "message": f"binNumber exceeds the number of bins available in this room ({room_data.get('nBins', 0)})."}}), mimetype="application/json")
 
         if not update_payload:
              return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "NO_UPDATE_FIELDS", "message": "No valid fields provided for update."}}), mimetype="application/json")
@@ -637,6 +671,164 @@ def _create_household_logic(req: https_fn.Request) -> https_fn.Response:
         return https_fn.Response(status=500, response=json.dumps({"success": False, "error": {"code": "INTERNAL_SERVER_ERROR", "message": str(e)}}), mimetype="application/json")
 
 
+# --- Room Management Logic ---
+def _create_room_logic(req: https_fn.Request, household_id: str) -> https_fn.Response:
+    """Creates a new room in a household."""
+    if req.method != "POST":
+        return https_fn.Response(status=405, response=json.dumps({"success": False, "error": {"code": "METHOD_NOT_ALLOWED", "message": "Method not allowed"}}), mimetype="application/json")
+
+    try:
+        data = req.get_json()
+        name = data.get("name")
+        n_bins = data.get("nBins")
+
+        if not name or not isinstance(n_bins, int):
+            return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "MISSING_FIELDS", "message": "'name' (string) and 'nBins' (integer) are required."}}), mimetype="application/json")
+
+        auth_user_uid = req.user["uid"]
+        user_profile = get_user_data_from_firestore(auth_user_uid)
+
+        if not user_profile or user_profile.get("householdId") != household_id:
+            return https_fn.Response(status=403, response=json.dumps({"success": False, "error": {"code": "FORBIDDEN", "message": "User cannot create a room in this household."}}), mimetype="application/json")
+
+        room_data = {
+            "name": name,
+            "nBins": n_bins,
+        }
+
+        _, room_ref = db.collection("households").document(household_id).collection("rooms").add(room_data)
+        
+        created_room_doc = room_ref.get()
+        response_data = created_room_doc.to_dict()
+        response_data["id"] = created_room_doc.id
+
+        return https_fn.Response(status=201, response=json.dumps({"success": True, "data": response_data, "error": None}), mimetype="application/json")
+
+    except Exception as e:
+        return https_fn.Response(status=500, response=json.dumps({"success": False, "error": {"code": "INTERNAL_SERVER_ERROR", "message": str(e)}}), mimetype="application/json")
+
+def _get_rooms_logic(req: https_fn.Request, household_id: str) -> https_fn.Response:
+    """Lists all rooms in a household."""
+    if req.method != "GET":
+        return https_fn.Response(status=405, response=json.dumps({"success": False, "error": {"code": "METHOD_NOT_ALLOWED", "message": "Method not allowed"}}), mimetype="application/json")
+
+    try:
+        auth_user_uid = req.user["uid"]
+        user_profile = get_user_data_from_firestore(auth_user_uid)
+
+        if not user_profile or user_profile.get("householdId") != household_id:
+            return https_fn.Response(status=403, response=json.dumps({"success": False, "error": {"code": "FORBIDDEN", "message": "User cannot list rooms for this household."}}), mimetype="application/json")
+
+        rooms_query = db.collection("households").document(household_id).collection("rooms").stream()
+        rooms_list = []
+        for room in rooms_query:
+            room_data = room.to_dict()
+            room_data["id"] = room.id
+            rooms_list.append(room_data)
+
+        return https_fn.Response(status=200, response=json.dumps({"success": True, "data": rooms_list, "error": None}), mimetype="application/json")
+
+    except Exception as e:
+        return https_fn.Response(status=500, response=json.dumps({"success": False, "error": {"code": "INTERNAL_SERVER_ERROR", "message": str(e)}}), mimetype="application/json")
+
+def _get_room_logic(req: https_fn.Request, household_id: str, room_id: str) -> https_fn.Response:
+    """Gets a specific room in a household."""
+    if req.method != "GET":
+        return https_fn.Response(status=405, response=json.dumps({"success": False, "error": {"code": "METHOD_NOT_ALLOWED", "message": "Method not allowed"}}), mimetype="application/json")
+
+    try:
+        auth_user_uid = req.user["uid"]
+        user_profile = get_user_data_from_firestore(auth_user_uid)
+
+        if not user_profile or user_profile.get("householdId") != household_id:
+            return https_fn.Response(status=403, response=json.dumps({"success": False, "error": {"code": "FORBIDDEN", "message": "User cannot access this room."}}), mimetype="application/json")
+
+        room_ref = db.collection("households").document(household_id).collection("rooms").document(room_id)
+        room_doc = room_ref.get()
+
+        if not room_doc.exists:
+            return https_fn.Response(status=404, response=json.dumps({"success": False, "error": {"code": "ROOM_NOT_FOUND", "message": "Room not found."}}), mimetype="application/json")
+
+        response_data = room_doc.to_dict()
+        response_data["id"] = room_doc.id
+
+        return https_fn.Response(status=200, response=json.dumps({"success": True, "data": response_data, "error": None}), mimetype="application/json")
+
+    except Exception as e:
+        return https_fn.Response(status=500, response=json.dumps({"success": False, "error": {"code": "INTERNAL_SERVER_ERROR", "message": str(e)}}), mimetype="application/json")
+
+def _update_room_logic(req: https_fn.Request, household_id: str, room_id: str) -> https_fn.Response:
+    """Updates a room in a household."""
+    if req.method != "PUT":
+        return https_fn.Response(status=405, response=json.dumps({"success": False, "error": {"code": "METHOD_NOT_ALLOWED", "message": "Method not allowed"}}), mimetype="application/json")
+
+    try:
+        data = req.get_json()
+        update_payload = {}
+        if "name" in data:
+            update_payload["name"] = data["name"]
+        if "nBins" in data:
+            if not isinstance(data["nBins"], int):
+                return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "INVALID_NBINS", "message": "'nBins' must be an integer."}}), mimetype="application/json")
+            update_payload["nBins"] = data["nBins"]
+
+        if not update_payload:
+            return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "NO_UPDATE_FIELDS", "message": "No valid fields provided for update."}}), mimetype="application/json")
+
+        auth_user_uid = req.user["uid"]
+        user_profile = get_user_data_from_firestore(auth_user_uid)
+
+        if not user_profile or user_profile.get("householdId") != household_id:
+            return https_fn.Response(status=403, response=json.dumps({"success": False, "error": {"code": "FORBIDDEN", "message": "User cannot update this room."}}), mimetype="application/json")
+
+        room_ref = db.collection("households").document(household_id).collection("rooms").document(room_id)
+        room_ref.update(update_payload)
+
+        updated_room_doc = room_ref.get()
+        response_data = updated_room_doc.to_dict()
+        response_data["id"] = updated_room_doc.id
+
+        return https_fn.Response(status=200, response=json.dumps({"success": True, "data": response_data, "error": None}), mimetype="application/json")
+
+    except Exception as e:
+        return https_fn.Response(status=500, response=json.dumps({"success": False, "error": {"code": "INTERNAL_SERVER_ERROR", "message": str(e)}}), mimetype="application/json")
+
+def _delete_room_logic(req: https_fn.Request, household_id: str, room_id: str) -> https_fn.Response:
+    """Deletes a room and all items within it from a household."""
+    if req.method != "DELETE":
+        return https_fn.Response(status=405, response=json.dumps({"success": False, "error": {"code": "METHOD_NOT_ALLOWED", "message": "Method not allowed"}}), mimetype="application/json")
+
+    try:
+        auth_user_uid = req.user["uid"]
+        user_profile = get_user_data_from_firestore(auth_user_uid)
+
+        if not user_profile or user_profile.get("householdId") != household_id:
+            return https_fn.Response(status=403, response=json.dumps({"success": False, "error": {"code": "FORBIDDEN", "message": "User cannot delete this room."}}), mimetype="application/json")
+
+        # Start a batch write
+        batch = db.batch()
+
+        # 1. Find all items in the room to be deleted
+        items_to_delete_query = db.collection("items").where("location.roomId", "==", room_id).where("householdId", "==", household_id)
+        items_to_delete_docs = items_to_delete_query.stream()
+
+        # 2. Add delete operations for each item to the batch
+        for doc in items_to_delete_docs:
+            batch.delete(doc.reference)
+
+        # 3. Add the delete operation for the room itself to the batch
+        room_ref = db.collection("households").document(household_id).collection("rooms").document(room_id)
+        batch.delete(room_ref)
+
+        # 4. Commit the batch
+        batch.commit()
+
+        return https_fn.Response(status=200, response=json.dumps({"success": True, "data": {"message": f"Room {room_id} and all its items deleted successfully."}, "error": None}), mimetype="application/json")
+
+    except Exception as e:
+        return https_fn.Response(status=500, response=json.dumps({"success": False, "error": {"code": "INTERNAL_SERVER_ERROR", "message": str(e)}}), mimetype="application/json")
+
+
 def _bulk_import_items_logic(req: https_fn.Request) -> https_fn.Response:
     """Bulk imports items from a CSV file.
 
@@ -666,18 +858,39 @@ def _bulk_import_items_logic(req: https_fn.Request) -> https_fn.Response:
         csv_file = io.StringIO(file.read().decode('utf-8'))
         reader = csv.DictReader(csv_file)
 
+        # Pre-fetch household rooms to avoid multiple reads inside the loop
+        rooms_ref = db.collection("households").document(household_id).collection("rooms").stream()
+        rooms_map = {room.to_dict()["name"]: {"id": room.id, "nBins": room.to_dict()["nBins"]} for room in rooms_ref}
+
         items_to_create = []
         for row in reader:
             name = row.get('name')
-            location = row.get('location')
+            room_name = row.get('roomName')
+            bin_number_str = row.get('binNumber')
 
-            if not name or not location:
+            if not name or not room_name or not bin_number_str:
                 # Skip rows with missing required fields
                 continue
+            
+            if room_name not in rooms_map:
+                # Or handle as an error for the whole batch
+                continue
+
+            try:
+                bin_number = int(bin_number_str)
+                if bin_number <= 0 or bin_number > rooms_map[room_name]["nBins"]:
+                    continue
+            except ValueError:
+                continue
+
+            location = {
+                "roomId": rooms_map[room_name]["id"],
+                "binNumber": bin_number
+            }
 
             item_data = {
                 "name": name,
-                "location": location.upper(),
+                "location": location,
                 "status": row.get('status', 'STORED').upper(),
                 "isPrivate": row.get('isPrivate', 'false').lower() == 'true',
                 "metadata": {
@@ -739,6 +952,27 @@ def api(req: https_fn.Request) -> https_fn.Response:
 
     if normalized_path == "/api/profile" and req.method == "GET":
         return require_auth(_get_profile_logic)(req)
+
+    # Handle /households/{householdId}/rooms and /households/{householdId}/rooms/{roomId}
+    if normalized_path.startswith("/api/households/"):
+        path_parts = normalized_path.split("/")
+        # /api/households/{hid}/rooms/{rid} -> ['', 'api', 'households', hid, 'rooms', rid] -> len=6
+        if len(path_parts) == 6 and path_parts[4] == "rooms":
+            household_id = path_parts[3]
+            room_id = path_parts[5]
+            if req.method == "GET":
+                return require_auth(_get_room_logic)(req, household_id=household_id, room_id=room_id)
+            elif req.method == "PUT":
+                return require_auth(_update_room_logic)(req, household_id=household_id, room_id=room_id)
+            elif req.method == "DELETE":
+                return require_auth(_delete_room_logic)(req, household_id=household_id, room_id=room_id)
+        # /api/households/{hid}/rooms -> ['', 'api', 'households', hid, 'rooms'] -> len=5
+        elif len(path_parts) == 5 and path_parts[4] == "rooms":
+            household_id = path_parts[3]
+            if req.method == "POST":
+                return require_auth(_create_room_logic)(req, household_id=household_id)
+            elif req.method == "GET":
+                return require_auth(_get_rooms_logic)(req, household_id=household_id)
 
     # Handle /items/{item_id} type paths
     if normalized_path.startswith("/api/items/"):
