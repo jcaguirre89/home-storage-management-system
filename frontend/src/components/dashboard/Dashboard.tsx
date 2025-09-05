@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { getItems, createItem } from '../../api/items';
+import { createItem } from '../../api/items';
 import { getRooms, createRoom, deleteRoom } from '../../api/households';
 import type { Item, Room, ApiResponse } from '../../types/api';
 
@@ -8,10 +8,11 @@ interface DashboardProps {
     householdId: string | null;
     displayName: string | null;
   };
+  items: Item[];
+  onEditItem: (item: Item) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ userProfile }) => {
-  const [items, setItems] = useState<Item[]>([]);
+const Dashboard: React.FC<DashboardProps> = ({ userProfile, items, onEditItem }) => {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -19,25 +20,15 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile }) => {
   const [quickAddRoom, setQuickAddRoom] = useState<Room | null>(null);
   const [showAddRoomModal, setShowAddRoomModal] = useState(false);
 
-  const fetchDashboardData = async () => {
+  const fetchRoomsData = async () => {
     if (!userProfile.householdId) return;
     try {
       setLoading(true);
-      const [itemsResponse, roomsResponse] = await Promise.all([
-        getItems(),
-        getRooms(userProfile.householdId),
-      ]);
-
-      if (itemsResponse.success && itemsResponse.data) {
-        setItems(itemsResponse.data);
+      const response = await getRooms(userProfile.householdId);
+      if (response.success && response.data) {
+        setRooms(response.data);
       } else {
-        setError(itemsResponse.error?.message || 'Failed to fetch items.');
-      }
-
-      if (roomsResponse.success && roomsResponse.data) {
-        setRooms(roomsResponse.data);
-      } else {
-        setError(roomsResponse.error?.message || 'Failed to fetch rooms.');
+        setError(response.error?.message || 'Failed to fetch rooms.');
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -48,7 +39,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile }) => {
   };
 
   useEffect(() => {
-    fetchDashboardData();
+    fetchRoomsData();
   }, [userProfile.householdId]);
 
   const roomItemCounts = useMemo(() => {
@@ -64,7 +55,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile }) => {
       const response: ApiResponse<Item> = await createItem(item);
       if (response.success) {
         setQuickAddRoom(null);
-        fetchDashboardData(); // Refetch data
+        // Data will be re-fetched by App.tsx due to dashboardKey change
       } else {
         throw new Error(response.error?.message || 'Failed to add item.');
       }
@@ -79,7 +70,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile }) => {
       const response = await createRoom(userProfile.householdId, { name: roomName, nBins });
       if (response.success) {
         setShowAddRoomModal(false);
-        fetchDashboardData();
+        fetchRoomsData();
       } else {
         throw new Error(response.error?.message || 'Failed to create room.');
       }
@@ -93,7 +84,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile }) => {
     try {
       const response = await deleteRoom(userProfile.householdId, roomId);
       if (response.success) {
-        fetchDashboardData();
+        fetchRoomsData();
       } else {
         setError(response.error?.message || 'Failed to delete room.');
       }
@@ -113,6 +104,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile }) => {
         room={selectedRoom} 
         items={items.filter(item => item.location.roomId === selectedRoom.id)}
         onBack={() => setSelectedRoom(null)}
+        onEditItem={onEditItem}
       />
     );
   }
@@ -203,9 +195,10 @@ interface RoomDetailViewProps {
   room: Room;
   items: Item[];
   onBack: () => void;
+  onEditItem: (item: Item) => void;
 }
 
-const RoomDetailView: React.FC<RoomDetailViewProps> = ({ room, items, onBack }) => {
+const RoomDetailView: React.FC<RoomDetailViewProps> = ({ room, items, onBack, onEditItem }) => {
   const [selectedBin, setSelectedBin] = useState<number | null>(null);
 
   const itemsByBin = useMemo(() => {
@@ -230,22 +223,28 @@ const RoomDetailView: React.FC<RoomDetailViewProps> = ({ room, items, onBack }) 
           <div 
             key={binNumber} 
             className={`card bg-base-100 shadow-xl cursor-pointer ${selectedBin === binNumber ? 'border-primary' : ''}`}
-            onClick={() => setSelectedBin(selectedBin === binNumber ? null : binNumber)}
+            onClick={() => setSelectedBin(binNumber)}
           >
             <div className="card-body">
               <h3 className="card-title">Bin {binNumber}</h3>
               <p>{(itemsByBin[binNumber] || []).length} items</p>
-              {selectedBin === binNumber && (
-                <ul className="list-disc pl-5 mt-2">
-                  {(itemsByBin[binNumber] || []).map(item => (
-                    <li key={item.id}>{item.name}</li>
-                  ))}
-                </ul>
-              )}
             </div>
           </div>
         ))}
       </div>
+
+      {selectedBin && (
+        <div className="mt-8">
+          <h3 className="text-2xl font-bold mb-4">Items in Bin {selectedBin}</h3>
+          <ul className="list-disc pl-5">
+            {(itemsByBin[selectedBin] || []).map(item => (
+              <li key={item.id} className="cursor-pointer hover:underline" onClick={() => onEditItem(item)}>
+                {item.name}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 };
