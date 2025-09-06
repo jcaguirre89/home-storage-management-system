@@ -113,6 +113,17 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, items, onEditItem })
     return <div className="flex justify-center items-center h-screen"><span className="loading loading-lg"></span></div>;
   }
 
+  if (error) {
+    return (
+        <div className="flex flex-col justify-center items-center h-screen">
+            <p className="text-red-500">{error}</p>
+            <button onClick={() => fetchRoomsData()} className="btn btn-primary mt-4">
+                Retry
+            </button>
+        </div>
+    );
+  }
+
   if (selectedRoom) {
     return (
       <RoomDetailView 

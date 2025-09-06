@@ -206,7 +206,6 @@ function App() {
       {renderContent()}
       {showBulkImportModal && userProfile?.householdId && (
         <BulkImportModal 
-          householdId={userProfile.householdId}
           onClose={() => setShowBulkImportModal(false)}
           onImportComplete={handleBulkImportComplete}
         />
@@ -228,12 +227,11 @@ function App() {
 
 
 interface BulkImportModalProps {
-  householdId: string;
   onClose: () => void;
   onImportComplete: () => void;
 }
 
-const BulkImportModal: React.FC<BulkImportModalProps> = ({ householdId, onClose, onImportComplete }) => {
+const BulkImportModal: React.FC<BulkImportModalProps> = ({ onClose, onImportComplete }) => {
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
