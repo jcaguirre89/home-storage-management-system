@@ -2,18 +2,18 @@
 
 ## 1. Overview
 
-This document describes the technical architecture for a smart home storage tracking system. The system allows a user to track the location and status of items stored in a physical grid of storage totes using voice commands via Google Assistant, with a supplementary web interface.
+This document describes the technical architecture for a smart home storage tracking system. The system allows a user to track the location and status of items stored in rooms and bins using voice commands via Google Assistant, with a supplementary web interface.
 
 ### 1.1 Core Functionality
 
-- Track item storage location in a grid (rows A-D, columns 1-4)
+- Track item storage location using rooms and bins
 - Voice command interface through Google Assistant
 - Web interface for direct manipulation and bulk imports
 - Status tracking for items (stored vs. removed)
 
 ### 1.2 User Interaction Flows
 
-1. **Adding items**: "OK Google, I put the microphone stand in A2"
+1. **Adding items**: "OK Google, I put the microphone stand in the garage, bin 2"
 2. **Finding items**: "OK Google, where is the microphone stand?"
 3. **Removing items**: "OK Google, I'm taking the microphone stand"
 4. **Web interface**: Manual CRUD operations and CSV import
@@ -59,7 +59,10 @@ This document describes the technical architecture for a smart home storage trac
   "items": {
     "{itemId}": {
       "name": "Microphone Stand",
-      "location": "A2",
+      "location": {
+        "roomId": "garageId",
+        "binNumber": 2
+      },
       "status": "STORED",
       "creatorUserId": "firebase_auth_uid_of_user_who_added_item",
       "householdId": "household_id_this_item_belongs_to",
@@ -106,6 +109,20 @@ This document describes the technical architecture for a smart home storage trac
 }
 ```
 
+#### Rooms Subcollection
+A new subcollection named `rooms` will be added under each household document (`households/{householdId}/rooms`).
+
+```json
+{
+  "rooms": {
+    "{roomId}": {
+      "name": "Garage",
+      "nBins": 16
+    }
+  }
+}
+```
+
 #### Dialogflow Webhook
 - `POST /api/dialogflow-webhook` - Entry point for Dialogflow fulfillment
 
@@ -129,6 +146,13 @@ This document describes the technical architecture for a smart home storage trac
 - `PUT /api/items/{itemId}` - Update an item
 - `DELETE /api/items/{itemId}` - Delete an item
 - `POST /api/items/bulk` - Bulk import items via CSV
+
+#### Room Management
+- `POST /api/households/{householdId}/rooms` - Create a new room.
+- `GET /api/households/{householdId}/rooms` - List all rooms.
+- `GET /api/households/{householdId}/rooms/{roomId}` - Get a specific room.
+- `PUT /api/households/{householdId}/rooms/{roomId}` - Update a room.
+- `DELETE /api/households/{householdId}/rooms/{roomId}` - Delete a room.
 
 #### Dialogflow Webhook
 - `POST /api/dialogflow-webhook` - Entry point for Dialogflow fulfillment
@@ -175,7 +199,8 @@ For errors:
 
 - **Parameters**:
   - `item` (required): The name of the item being stored
-  - `location` (required): The storage location (A1-D4)
+  - `roomName` (required): The name of the room
+  - `binNumber` (required): The bin number
 
 #### FindItem Intent
 - **Training phrases**:
@@ -201,20 +226,27 @@ For errors:
 - Map for common item names based on initial usage
 - Automatically expanded as new items are added
 
-#### `@Location` (Composite Entity)
-- Pattern: [A-D][1-4]
-- Examples: A1, B3, C4, D2
+#### `@RoomName` (List Type)
+- Stores the names of the rooms created by the user.
+
+#### `@BinNumber` (Number Type)
+- Represents the bin number.
 
 ## 6. Frontend Architecture
 
 ### 6.1 UI Components
 
 #### Dashboard View
-- A single page application that displays the user's items.
-- Allows users to add, delete, and view items.
-- Provides a form to add a new item with name and location.
+- A single page application that displays the user's items in a room-centric view.
+- Displays rooms as cards, with item and bin counts.
+- Allows users to add, delete, and view rooms.
+- Clicking on a room reveals its bins and the items within them.
+- Provides a form to add a new item with name, category, and location (room and bin).
 - Includes a bulk import feature to upload a CSV file of items.
 - Displays errors to the user.
+
+#### RoomSetup View
+- Allows users to edit and delete existing rooms.
 
 ## 7. Security Implementation
 
@@ -262,10 +294,8 @@ Based on free tier limits and expected single-user usage:
 
 ## 9. Future Enhancements
 
-- Item categories and tagging
 - Image uploads for items
 - Voice command for listing all items in a specific location
 - Expiry date tracking for perishable items
-- Item sharing with household members
 - Mobile app with barcode scanning
 - Statistical usage reporting
