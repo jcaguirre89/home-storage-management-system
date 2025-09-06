@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createItem } from '../../api/items';
-import { getRooms, createRoom, deleteRoom } from '../../api/households';
+import { getRooms, createRoom, deleteRoom, updateRoom } from '../../api/households';
 import type { Item, Room, ApiResponse } from '../../types/api';
 
 interface DashboardProps {
@@ -94,6 +94,21 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, items, onEditItem })
     }
   };
 
+  const handleUpdateRoom = async (room: Room, newName: string, newNBins: number) => {
+    if (!userProfile.householdId) return;
+    try {
+      const response = await updateRoom(userProfile.householdId, room.id, { name: newName, nBins: newNBins });
+      if (response.success && response.data) {
+        setSelectedRoom(response.data);
+        fetchRoomsData();
+      } else {
+        throw new Error(response.error?.message || 'Failed to update room.');
+      }
+    } catch (err) {
+      throw err;
+    }
+  };
+
   if (loading) {
     return <div className="flex justify-center items-center h-screen"><span className="loading loading-lg"></span></div>;
   }
@@ -105,6 +120,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, items, onEditItem })
         items={items.filter(item => item.location.roomId === selectedRoom.id)}
         onBack={() => setSelectedRoom(null)}
         onEditItem={onEditItem}
+        onUpdateRoom={handleUpdateRoom}
       />
     );
   }
@@ -196,10 +212,12 @@ interface RoomDetailViewProps {
   items: Item[];
   onBack: () => void;
   onEditItem: (item: Item) => void;
+  onUpdateRoom: (room: Room, newName: string, newNBins: number) => Promise<void>;
 }
 
-const RoomDetailView: React.FC<RoomDetailViewProps> = ({ room, items, onBack, onEditItem }) => {
+const RoomDetailView: React.FC<RoomDetailViewProps> = ({ room, items, onBack, onEditItem, onUpdateRoom }) => {
   const [selectedBin, setSelectedBin] = useState<number | null>(null);
+  const [showEditRoomModal, setShowEditRoomModal] = useState(false);
 
   const itemsByBin = useMemo(() => {
     const byBin: { [binNumber: number]: Item[] } = {};
@@ -212,12 +230,25 @@ const RoomDetailView: React.FC<RoomDetailViewProps> = ({ room, items, onBack, on
     return byBin;
   }, [items]);
 
+  const handleUpdateRoom = async (newName: string, newNBins: number) => {
+    await onUpdateRoom(room, newName, newNBins);
+    setShowEditRoomModal(false);
+  };
+
   return (
     <div className="container mx-auto p-4">
       <button onClick={onBack} className="btn btn-ghost mb-4">
         &larr; Back to Dashboard
       </button>
-      <h2 className="text-3xl font-bold mb-6">{room.name}</h2>
+      <div className="flex items-center mb-6">
+        <h2 className="text-3xl font-bold">{room.name}</h2>
+        <button onClick={() => setShowEditRoomModal(true)} className="btn btn-ghost btn-sm ml-2">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" />
+            <path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" />
+          </svg>
+        </button>
+      </div>
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
         {Array.from({ length: room.nBins }, (_, i) => i + 1).map(binNumber => (
           <div 
@@ -245,6 +276,75 @@ const RoomDetailView: React.FC<RoomDetailViewProps> = ({ room, items, onBack, on
           </ul>
         </div>
       )}
+
+      {showEditRoomModal && (
+        <EditRoomModal
+          room={room}
+          onClose={() => setShowEditRoomModal(false)}
+          onUpdateRoom={handleUpdateRoom}
+        />
+      )}
+    </div>
+  );
+};
+
+interface EditRoomModalProps {
+  room: Room;
+  onClose: () => void;
+  onUpdateRoom: (newName: string, newNBins: number) => Promise<void>;
+}
+
+const EditRoomModal: React.FC<EditRoomModalProps> = ({ room, onClose, onUpdateRoom }) => {
+  const [roomName, setRoomName] = useState(room.name);
+  const [nBins, setNBins] = useState(room.nBins);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!roomName.trim()) {
+      setError('Room name cannot be empty.');
+      return;
+    }
+    if (nBins <= 0) {
+      setError('Number of bins must be a positive number.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await onUpdateRoom(roomName, nBins);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
+      setError(errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="modal modal-open">
+      <div className="modal-box">
+        <h3 className="font-bold text-lg">Edit {room.name}</h3>
+        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+          <div className="form-control">
+            <label className="label"><span className="label-text">Room Name</span></label>
+            <input type="text" placeholder="e.g., Garage" className="input input-bordered" value={roomName} onChange={e => setRoomName(e.target.value)} />
+          </div>
+          <div className="form-control">
+            <label className="label"><span className="label-text">Number of Bins</span></label>
+            <input type="number" min="1" className="input input-bordered" value={nBins} onChange={e => setNBins(parseInt(e.target.value, 10))} />
+          </div>
+          {error && <div className="alert alert-error">{error}</div>}
+          <div className="modal-action">
+            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+              {isSubmitting ? <span className="loading loading-spinner"></span> : 'Update Room'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 };
