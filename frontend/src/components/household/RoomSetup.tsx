@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { getRooms, updateRoom, deleteRoom } from '../../api/households';
 import type { Room, ApiError } from '../../types/api';
 import { AxiosError } from 'axios';
@@ -16,9 +16,9 @@ const RoomSetup: React.FC<RoomSetupProps> = ({ householdId }) => {
 
   useEffect(() => {
     fetchRooms();
-  }, [householdId]);
+  }, [householdId, fetchRooms]);
 
-  const fetchRooms = async () => {
+  const fetchRooms = useCallback(async () => {
     setIsLoading(true);
     try {
       const response = await getRooms(householdId);
@@ -34,7 +34,7 @@ const RoomSetup: React.FC<RoomSetupProps> = ({ householdId }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [householdId]);
 
   const handleUpdateRoom = async (room: Room) => {
     setError(null);

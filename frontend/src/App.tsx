@@ -50,7 +50,7 @@ function App() {
     }
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!userProfile?.householdId) return;
     try {
       setLoading(true);
@@ -76,13 +76,13 @@ function App() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userProfile?.householdId]);
 
   useEffect(() => {
     if (userProfile?.householdId) {
       fetchData();
     }
-  }, [userProfile?.householdId, dashboardKey]);
+  }, [userProfile?.householdId, dashboardKey, fetchData]);
 
   const searchResults = useMemo(() => {
     if (!searchQuery) return [];
@@ -119,16 +119,12 @@ function App() {
   };
 
   const handleUpdateItem = async (item: Item) => {
-    try {
-      const response = await updateItem(item.id, item);
-      if (response.success) {
-        setEditingItem(null);
-        setDashboardKey(prevKey => prevKey + 1);
-      } else {
-        throw new Error(response.error?.message || 'Failed to update item.');
-      }
-    } catch (err) {
-      throw err;
+    const response = await updateItem(item.id, item);
+    if (response.success) {
+      setEditingItem(null);
+      setDashboardKey(prevKey => prevKey + 1);
+    } else {
+      throw new Error(response.error?.message || 'Failed to update item.');
     }
   };
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { createItem } from '../../api/items';
 import { getRooms, createRoom, deleteRoom, updateRoom } from '../../api/households';
 import type { Item, Room, ApiResponse } from '../../types/api';
@@ -18,9 +18,10 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, items, onEditItem })
   const [error, setError] = useState<string | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [quickAddRoom, setQuickAddRoom] = useState<Room | null>(null);
+  const [quickAddBinNumber, setQuickAddBinNumber] = useState<number | null>(null);
   const [showAddRoomModal, setShowAddRoomModal] = useState(false);
 
-  const fetchRoomsData = async () => {
+  const fetchRoomsData = useCallback(async () => {
     if (!userProfile.householdId) return;
     try {
       setLoading(true);
@@ -36,11 +37,11 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, items, onEditItem })
     } finally {
       setLoading(false);
     }
-  };
+  }, [userProfile.householdId]);
 
   useEffect(() => {
     fetchRoomsData();
-  }, [userProfile.householdId]);
+  }, [userProfile.householdId, fetchRoomsData]);
 
   const roomItemCounts = useMemo(() => {
     const counts: { [roomId: string]: number } = {};
@@ -51,31 +52,23 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, items, onEditItem })
   }, [items, rooms]);
 
   const handleQuickAddItem = async (item: Omit<Item, 'id' | 'creatorUserId' | 'householdId' | 'lastUpdated'>) => {
-    try {
-      const response: ApiResponse<Item> = await createItem(item);
-      if (response.success) {
-        setQuickAddRoom(null);
-        // Data will be re-fetched by App.tsx due to dashboardKey change
-      } else {
-        throw new Error(response.error?.message || 'Failed to add item.');
-      }
-    } catch (err) {
-      throw err;
+    const response: ApiResponse<Item> = await createItem(item);
+    if (response.success) {
+      setQuickAddRoom(null);
+      // Data will be re-fetched by App.tsx due to dashboardKey change
+    } else {
+      throw new Error(response.error?.message || 'Failed to add item.');
     }
   };
 
   const handleAddRoom = async (roomName: string, nBins: number) => {
     if (!userProfile.householdId) return;
-    try {
-      const response = await createRoom(userProfile.householdId, { name: roomName, nBins });
-      if (response.success) {
-        setShowAddRoomModal(false);
-        fetchRoomsData();
-      } else {
-        throw new Error(response.error?.message || 'Failed to create room.');
-      }
-    } catch (err) {
-      throw err;
+    const response = await createRoom(userProfile.householdId, { name: roomName, nBins });
+    if (response.success) {
+      setShowAddRoomModal(false);
+      fetchRoomsData();
+    } else {
+      throw new Error(response.error?.message || 'Failed to create room.');
     }
   };
 
@@ -96,16 +89,12 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, items, onEditItem })
 
   const handleUpdateRoom = async (room: Room, newName: string, newNBins: number) => {
     if (!userProfile.householdId) return;
-    try {
-      const response = await updateRoom(userProfile.householdId, room.id, { name: newName, nBins: newNBins });
-      if (response.success && response.data) {
-        setSelectedRoom(response.data);
-        fetchRoomsData();
-      } else {
-        throw new Error(response.error?.message || 'Failed to update room.');
-      }
-    } catch (err) {
-      throw err;
+    const response = await updateRoom(userProfile.householdId, room.id, { name: newName, nBins: newNBins });
+    if (response.success && response.data) {
+      setSelectedRoom(response.data);
+      fetchRoomsData();
+    } else {
+      throw new Error(response.error?.message || 'Failed to update room.');
     }
   };
 
@@ -124,41 +113,49 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, items, onEditItem })
     );
   }
 
-  if (selectedRoom) {
-    return (
-      <RoomDetailView 
-        room={selectedRoom} 
-        items={items.filter(item => item.location.roomId === selectedRoom.id)}
-        onBack={() => setSelectedRoom(null)}
-        onEditItem={onEditItem}
-        onUpdateRoom={handleUpdateRoom}
-      />
-    );
-  }
-
   return (
     <div className="container mx-auto p-4">
-      <h2 className="text-3xl font-bold mb-6">Dashboard</h2>
+      {selectedRoom ? (
+        <RoomDetailView 
+          room={selectedRoom} 
+          items={items.filter(item => item.location.roomId === selectedRoom.id)}
+          onBack={() => setSelectedRoom(null)}
+          onEditItem={onEditItem}
+          onUpdateRoom={handleUpdateRoom}
+          onAddItem={(room, binNumber) => {
+            setQuickAddRoom(room);
+            setQuickAddBinNumber(binNumber);
+          }}
+        />
+      ) : (
+        <>
+          <h2 className="text-3xl font-bold mb-6">Dashboard</h2>
 
-      {/* Rooms List */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-        {rooms.map(room => (
-          <RoomCard 
-            key={room.id} 
-            room={room} 
-            itemCount={roomItemCounts[room.id] || 0} 
-            onQuickAdd={() => setQuickAddRoom(room)} 
-            onView={() => setSelectedRoom(room)} 
-            onDelete={() => handleDeleteRoom(room.id)}
-          />
-        ))}
-        <AddRoomCard onClick={() => setShowAddRoomModal(true)} />
-      </div>
+          {/* Rooms List */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+            {rooms.map(room => (
+              <RoomCard 
+                key={room.id} 
+                room={room} 
+                itemCount={roomItemCounts[room.id] || 0} 
+                onQuickAdd={() => setQuickAddRoom(room)} 
+                onView={() => setSelectedRoom(room)} 
+                onDelete={() => handleDeleteRoom(room.id)}
+              />
+            ))}
+            <AddRoomCard onClick={() => setShowAddRoomModal(true)} />
+          </div>
+        </>
+      )}
 
       {quickAddRoom && (
         <QuickAddModal 
           room={quickAddRoom}
-          onClose={() => setQuickAddRoom(null)}
+          binNumber={quickAddBinNumber}
+          onClose={() => {
+            setQuickAddRoom(null);
+            setQuickAddBinNumber(null);
+          }}
           onAddItem={handleQuickAddItem}
         />
       )}
@@ -224,9 +221,10 @@ interface RoomDetailViewProps {
   onBack: () => void;
   onEditItem: (item: Item) => void;
   onUpdateRoom: (room: Room, newName: string, newNBins: number) => Promise<void>;
+  onAddItem: (room: Room, binNumber: number) => void;
 }
 
-const RoomDetailView: React.FC<RoomDetailViewProps> = ({ room, items, onBack, onEditItem, onUpdateRoom }) => {
+const RoomDetailView: React.FC<RoomDetailViewProps> = ({ room, items, onBack, onEditItem, onUpdateRoom, onAddItem }) => {
   const [selectedBin, setSelectedBin] = useState<number | null>(null);
   const [showEditRoomModal, setShowEditRoomModal] = useState(false);
 
@@ -267,9 +265,22 @@ const RoomDetailView: React.FC<RoomDetailViewProps> = ({ room, items, onBack, on
             className={`card bg-base-100 shadow-xl cursor-pointer ${selectedBin === binNumber ? 'border-primary' : ''}`}
             onClick={() => setSelectedBin(binNumber)}
           >
-            <div className="card-body">
-              <h3 className="card-title">Bin {binNumber}</h3>
-              { (itemsByBin[binNumber] || []).length > 0 && <p>{(itemsByBin[binNumber] || []).length} items</p> }
+            <div className="card-body p-4">
+              <div className="flex justify-between items-center">
+                <h3 className="card-title text-lg">Bin {binNumber}</h3>
+                <button 
+                  className="btn btn-ghost btn-sm btn-circle"
+                  data-room-id={room.id}
+                  data-bin-number={binNumber}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAddItem(room, binNumber);
+                  }}
+                >
+                  +
+                </button>
+              </div>
+              { (itemsByBin[binNumber] || []).length > 0 && <p className="text-sm">{(itemsByBin[binNumber] || []).length} items</p> }
             </div>
           </div>
         ))}
@@ -362,13 +373,14 @@ const EditRoomModal: React.FC<EditRoomModalProps> = ({ room, onClose, onUpdateRo
 
 interface QuickAddModalProps {
   room: Room;
+  binNumber?: number | null;
   onClose: () => void;
   onAddItem: (item: Omit<Item, 'id' | 'creatorUserId' | 'householdId' | 'lastUpdated'>) => Promise<void>;
 }
 
-const QuickAddModal: React.FC<QuickAddModalProps> = ({ room, onClose, onAddItem }) => {
+const QuickAddModal: React.FC<QuickAddModalProps> = ({ room, binNumber: initialBinNumber, onClose, onAddItem }) => {
   const [itemName, setItemName] = useState('');
-  const [binNumber, setBinNumber] = useState(1);
+  const [binNumber, setBinNumber] = useState(initialBinNumber || 1);
   const [status, setStatus] = useState<'STORED' | 'OUT'>('STORED');
   const [isPrivate, setIsPrivate] = useState(false);
   const [category, setCategory] = useState('');

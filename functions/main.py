@@ -3,7 +3,7 @@
 # Deploy with `firebase deploy`
 
 from firebase_functions import https_fn, options
-from firebase_admin import credentials, auth, firestore
+from firebase_admin import auth, firestore
 import firebase_admin
 import json # Import for json.dumps if needed, or direct dict passing
 import functools # Added for wrapper
@@ -11,25 +11,24 @@ import re # Import for regular expressions
 import csv
 import io
 
-# Initialize Firebase Admin SDK
-# Make sure to replace 'path/to/your/serviceAccountKey.json' with the actual path to your service account key
-# or ensure your environment is configured for Firebase Admin SDK auto-initialization if deploying.
 try:
-    # Attempt to initialize with a service account key (for local development)
-    # Ensure 'GOOGLE_APPLICATION_CREDENTIALS' environment variable is set,
-    # or the service account key file is present.
-    # For deployed functions, this initialization might not be needed if the runtime provides it.
-    cred = credentials.ApplicationDefault()
-    firebase_admin.initialize_app(cred)
-except Exception as e:
-    # Fallback if default credentials are not found (e.g., for some local setups without env var)
-    # This is a common pattern but ensure your specific setup is covered.
-    # If this is running in a Firebase environment, it might initialize without parameters.
-    if not firebase_admin._apps: # Check if already initialized
-        firebase_admin.initialize_app()
+    # This will work in Firebase Functions environment automatically
+    firebase_admin.initialize_app()
+except ValueError as e:
+    # App already initialized
+    pass
 
+# Don't initialize here - do it lazily
+db = None
 
-db = firestore.client()
+def get_db():
+    """Lazy initialization of Firestore client"""
+    global db
+    if db is None:
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app()
+        db = firestore.client()
+    return db
 
 # CORS options for development (adjust for production)
 # options.set_global_options(cors=options.CorsOptions(cors_origins="*", cors_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])) # This line caused TypeError
@@ -45,6 +44,7 @@ def get_user_data_from_firestore(user_id: str) -> dict | None:
     Returns:
         A dictionary containing the user's data or None if not found.
     """
+    db = get_db()  # Get the db instance
     user_doc_ref = db.collection("users").document(user_id)
     user_doc = user_doc_ref.get()
     if user_doc.exists:
@@ -152,6 +152,8 @@ def _register_logic(req: https_fn.Request) -> https_fn.Response:
             user_data["householdId"] = household_id
         else:
             user_data["householdId"] = None # Explicitly set to None if not provided
+
+        db = get_db()  # Get the db instance
 
         # create user document in firestore
         user_ref = db.collection("users").document(user_record.uid)
@@ -289,6 +291,7 @@ def _create_item_logic(req: https_fn.Request) -> https_fn.Response: # RENAMED
 
         household_id = user_profile["householdId"]
         
+        db = get_db()
         # Validate room exists and bin number is valid
         room_ref = db.collection("households").document(household_id).collection("rooms").document(room_id)
         room_doc = room_ref.get()
@@ -386,6 +389,8 @@ def _update_item_logic(req: https_fn.Request, actual_item_id: str) -> https_fn.R
             if not isinstance(bin_number, int) or bin_number <= 0:
                 return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "INVALID_BIN_NUMBER", "message": "binNumber must be a positive integer."}}), mimetype="application/json")
 
+            db = get_db()
+
             household_id = existing_item_data.get("householdId")
             room_ref = db.collection("households").document(household_id).collection("rooms").document(room_id)
             room_doc = room_ref.get()
@@ -433,6 +438,7 @@ def _delete_item_logic(req: https_fn.Request, actual_item_id: str) -> https_fn.R
         return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "MISSING_ITEM_ID", "message": "Item ID is required for delete."}}), mimetype="application/json")
 
     try:
+        db = get_db()
         item_doc_ref = db.collection("items").document(actual_item_id)
         item_doc = item_doc_ref.get()
 
@@ -478,7 +484,7 @@ def _get_items_logic(req: https_fn.Request) -> https_fn.Response: # RENAMED from
             return https_fn.Response(status=200, response=json.dumps({"success": True, "data": [], "error": None}), mimetype="application/json")
 
         household_id = user_profile["householdId"]
-
+        db = get_db()
         items_query = db.collection("items")\
             .where(filter=firestore.FieldFilter("householdId", "==", household_id))
         # Further filtering for isPrivate items would ideally be handled by Firestore security rules.
@@ -574,6 +580,7 @@ def _get_item_logic(req: https_fn.Request, actual_item_id: str) -> https_fn.Resp
         return https_fn.Response(status=400, response=json.dumps({"success": False, "error": {"code": "MISSING_ITEM_ID", "message": "Item ID is required."}}), mimetype="application/json")
 
     try:
+        db = get_db()
         item_doc_ref = db.collection("items").document(actual_item_id)
         item_doc = item_doc_ref.get()
 
@@ -644,6 +651,7 @@ def _create_household_logic(req: https_fn.Request) -> https_fn.Response:
             "memberUserIds": [auth_user_uid],
             "created": firestore.SERVER_TIMESTAMP
         }
+        db = get_db()
         # Firestore batch for atomic operation
         batch = db.batch()
 
@@ -695,7 +703,7 @@ def _create_room_logic(req: https_fn.Request, household_id: str) -> https_fn.Res
             "name": name,
             "nBins": n_bins,
         }
-
+        db = get_db()
         _, room_ref = db.collection("households").document(household_id).collection("rooms").add(room_data)
         
         created_room_doc = room_ref.get()
@@ -718,7 +726,7 @@ def _get_rooms_logic(req: https_fn.Request, household_id: str) -> https_fn.Respo
 
         if not user_profile or user_profile.get("householdId") != household_id:
             return https_fn.Response(status=403, response=json.dumps({"success": False, "error": {"code": "FORBIDDEN", "message": "User cannot list rooms for this household."}}), mimetype="application/json")
-
+        db = get_db()
         rooms_query = db.collection("households").document(household_id).collection("rooms").stream()
         rooms_list = []
         for room in rooms_query:
@@ -743,6 +751,7 @@ def _get_room_logic(req: https_fn.Request, household_id: str, room_id: str) -> h
         if not user_profile or user_profile.get("householdId") != household_id:
             return https_fn.Response(status=403, response=json.dumps({"success": False, "error": {"code": "FORBIDDEN", "message": "User cannot access this room."}}), mimetype="application/json")
 
+        db = get_db()
         room_ref = db.collection("households").document(household_id).collection("rooms").document(room_id)
         room_doc = room_ref.get()
 
@@ -781,6 +790,7 @@ def _update_room_logic(req: https_fn.Request, household_id: str, room_id: str) -
         if not user_profile or user_profile.get("householdId") != household_id:
             return https_fn.Response(status=403, response=json.dumps({"success": False, "error": {"code": "FORBIDDEN", "message": "User cannot update this room."}}), mimetype="application/json")
 
+        db = get_db()
         room_ref = db.collection("households").document(household_id).collection("rooms").document(room_id)
         room_ref.update(update_payload)
 
@@ -805,6 +815,7 @@ def _delete_room_logic(req: https_fn.Request, household_id: str, room_id: str) -
         if not user_profile or user_profile.get("householdId") != household_id:
             return https_fn.Response(status=403, response=json.dumps({"success": False, "error": {"code": "FORBIDDEN", "message": "User cannot delete this room."}}), mimetype="application/json")
 
+        db = get_db()
         # Start a batch write
         batch = db.batch()
 
@@ -858,6 +869,7 @@ def _bulk_import_items_logic(req: https_fn.Request) -> https_fn.Response:
         csv_file = io.StringIO(file.read().decode('utf-8'))
         reader = csv.DictReader(csv_file)
 
+        db = get_db()
         # Pre-fetch household rooms to avoid multiple reads inside the loop
         rooms_ref = db.collection("households").document(household_id).collection("rooms").stream()
         rooms_map = {room.to_dict()["name"]: {"id": room.id, "nBins": room.to_dict()["nBins"]} for room in rooms_ref}
