@@ -26,7 +26,6 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showBulkImportModal, setShowBulkImportModal] = useState(false);
-  const [dashboardKey, setDashboardKey] = useState(0);
   const [items, setItems] = useState<Item[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -78,11 +77,36 @@ function App() {
     }
   }, [userProfile?.householdId]);
 
+  const refreshData = useCallback(async () => {
+    if (!userProfile?.householdId) return;
+    try {
+      const [itemsResponse, roomsResponse] = await Promise.all([
+        getItems(),
+        getRooms(userProfile.householdId),
+      ]);
+
+      if (itemsResponse.success && itemsResponse.data) {
+        setItems(itemsResponse.data);
+      } else {
+        setError(itemsResponse.error?.message || 'Failed to fetch items.');
+      }
+
+      if (roomsResponse.success && roomsResponse.data) {
+        setRooms(roomsResponse.data);
+      } else {
+        setError(roomsResponse.error?.message || 'Failed to fetch rooms.');
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
+      setError(errorMessage);
+    }
+  }, [userProfile?.householdId]);
+
   useEffect(() => {
     if (userProfile?.householdId) {
       fetchData();
     }
-  }, [userProfile?.householdId, dashboardKey, fetchData]);
+  }, [userProfile?.householdId, fetchData]);
 
   const searchResults = useMemo(() => {
     if (!searchQuery) return [];
@@ -115,14 +139,18 @@ function App() {
 
   const handleBulkImportComplete = () => {
     setShowBulkImportModal(false);
-    setDashboardKey(prevKey => prevKey + 1);
+    refreshData();
+  };
+
+  const handleItemCreated = () => {
+    refreshData();
   };
 
   const handleUpdateItem = async (item: Item) => {
     const response = await updateItem(item.id, item);
     if (response.success) {
       setEditingItem(null);
-      setDashboardKey(prevKey => prevKey + 1);
+      refreshData();
     } else {
       throw new Error(response.error?.message || 'Failed to update item.');
     }
@@ -163,7 +191,7 @@ function App() {
     if (!userProfile.householdId) {
       mainContent = <HouseholdSetup onHouseholdCreated={handleHouseholdCreated} />;
     } else {
-      mainContent = <Dashboard key={dashboardKey} userProfile={userProfile} items={items} onEditItem={setEditingItem} />;
+      mainContent = <Dashboard userProfile={userProfile} items={items} onEditItem={setEditingItem} onItemCreated={handleItemCreated} />;
     }
 
     return (

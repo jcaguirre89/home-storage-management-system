@@ -10,9 +10,10 @@ interface DashboardProps {
   };
   items: Item[];
   onEditItem: (item: Item) => void;
+  onItemCreated: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ userProfile, items, onEditItem }) => {
+const Dashboard: React.FC<DashboardProps> = ({ userProfile, items, onEditItem, onItemCreated }) => {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +56,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userProfile, items, onEditItem })
     const response: ApiResponse<Item> = await createItem(item);
     if (response.success) {
       setQuickAddRoom(null);
-      // Data will be re-fetched by App.tsx due to dashboardKey change
+      onItemCreated();
     } else {
       throw new Error(response.error?.message || 'Failed to add item.');
     }

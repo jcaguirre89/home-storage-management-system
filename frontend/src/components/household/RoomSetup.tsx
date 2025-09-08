@@ -14,10 +14,6 @@ const RoomSetup: React.FC<RoomSetupProps> = ({ householdId }) => {
 
   const [editingRoom, setEditingRoom] = useState<Room | null>(null);
 
-  useEffect(() => {
-    fetchRooms();
-  }, [householdId, fetchRooms]);
-
   const fetchRooms = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -35,6 +31,10 @@ const RoomSetup: React.FC<RoomSetupProps> = ({ householdId }) => {
       setIsLoading(false);
     }
   }, [householdId]);
+
+  useEffect(() => {
+    fetchRooms();
+  }, [fetchRooms]);
 
   const handleUpdateRoom = async (room: Room) => {
     setError(null);
