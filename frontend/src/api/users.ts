@@ -1,4 +1,4 @@
-import { api } from './index';
+import api from './index';
 
 export const createUser = async (user: { uid: string; email: string | null; displayName: string | null; }) => {
   try {
