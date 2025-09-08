@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { login } from '../../lib/firebase/auth';
+import { login, signInWithGoogle } from '../../lib/firebase/auth';
 
 interface LoginProps {
   onToggle: () => void;
@@ -27,6 +27,16 @@ const Login: React.FC<LoginProps> = ({ onToggle }) => {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
       // You can add more specific error handling based on Firebase error codes
       setError(errorMessage || 'Failed to log in. Please check your credentials.');
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      await signInWithGoogle();
+      // On successful login, the onAuthStateChanged listener in App.tsx
+      // will handle showing the main application content.
+    } catch (error) {
+      setError('Failed to sign in with Google. Please try again.');
     }
   };
 
@@ -66,6 +76,12 @@ const Login: React.FC<LoginProps> = ({ onToggle }) => {
             )}
             <div className="form-control mt-6">
               <button type="submit" className="btn btn-primary">Login</button>
+            </div>
+            <div className="divider">OR</div>
+            <div className="form-control">
+              <button type="button" className="btn btn-secondary" onClick={handleGoogleSignIn}>
+                Sign in with Google
+              </button>
             </div>
           </form>
           <p className="text-center p-4">

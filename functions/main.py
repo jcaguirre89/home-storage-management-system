@@ -44,11 +44,24 @@ def get_user_data_from_firestore(user_id: str) -> dict | None:
     Returns:
         A dictionary containing the user's data or None if not found.
     """
-    db = get_db()  # Get the db instance
+    db = get_db()
     user_doc_ref = db.collection("users").document(user_id)
     user_doc = user_doc_ref.get()
     if user_doc.exists:
         return user_doc.to_dict()
+    return None
+
+
+def get_user_by_email(email: str) -> dict | None:
+    """Fetches a user from Firestore by their email address."""
+    db = get_db()
+    users_ref = db.collection("users")
+    query = users_ref.where("email", "==", email).limit(1)
+    results = query.stream()
+    for user in results:
+        user_data = user.to_dict()
+        user_data["id"] = user.id
+        return user_data
     return None
 
 def require_auth(f):
@@ -929,6 +942,66 @@ def _bulk_import_items_logic(req: https_fn.Request) -> https_fn.Response:
     except Exception as e:
         return https_fn.Response(status=500, response=json.dumps({"success": False, "error": {"code": "INTERNAL_SERVER_ERROR", "message": str(e)}}), mimetype="application/json")
 
+def _create_user_logic(req: https_fn.Request) -> https_fn.Response:
+    if req.method != "POST":
+        return https_fn.Response(
+            status=405,
+            response=json.dumps({"success": False, "error": {"code": "METHOD_NOT_ALLOWED", "message": "Method not allowed"}}),
+            mimetype="application/json"
+        )
+
+    try:
+        data = req.get_json()
+        uid = data.get("uid")
+        email = data.get("email")
+        display_name = data.get("displayName")
+
+        if not uid or not email:
+            return https_fn.Response(
+                status=400,
+                response=json.dumps({"success": False, "error": {"code": "MISSING_FIELDS", "message": "UID and email are required."}}),
+                mimetype="application/json"
+            )
+
+        db = get_db()
+        user_ref = db.collection("users").document(uid)
+
+        # Check if user already exists
+        if user_ref.get().exists:
+            return https_fn.Response(
+                status=200,
+                response=json.dumps({"success": True, "data": {"message": "User already exists."}}),
+                mimetype="application/json"
+            )
+
+        user_data = {
+            "email": email,
+            "displayName": display_name if display_name else email,
+            "householdId": None,
+            "created": firestore.SERVER_TIMESTAMP,
+            "lastLogin": firestore.SERVER_TIMESTAMP
+        }
+
+        user_ref.set(user_data)
+
+        response_dict = {
+            "success": True,
+            "data": {"uid": uid, "email": email},
+            "error": None
+        }
+        return https_fn.Response(
+            status=201,
+            response=json.dumps(response_dict),
+            mimetype="application/json"
+        )
+
+    except Exception as e:
+        return https_fn.Response(
+            status=500,
+            response=json.dumps({"success": False, "error": {"code": "INTERNAL_SERVER_ERROR", "message": str(e)}}),
+            mimetype="application/json"
+        )
+
 # --- API Router Function ---
 @https_fn.on_request(max_instances=10, memory=options.MemoryOption.MB_256, cors=options.CorsOptions(cors_origins="*", cors_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])) # Added default options, can be adjusted
 def api(req: https_fn.Request) -> https_fn.Response:
@@ -997,6 +1070,9 @@ def api(req: https_fn.Request) -> https_fn.Response:
                 return require_auth(_update_item_logic)(req, actual_item_id=actual_item_id)
             elif req.method == "DELETE":
                 return require_auth(_delete_item_logic)(req, actual_item_id=actual_item_id)
+
+    if normalized_path == "/api/users" and req.method == "POST":
+        return _create_user_logic(req)
 
     # If no routes matched, return 404 Not Found
     return https_fn.Response(

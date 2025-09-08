@@ -2,9 +2,11 @@ import {
   signInWithEmailAndPassword,
   signOut,
   type Auth,
-  type UserCredential
-} from 'firebase/auth';
-import { auth } from './config';
+  type UserCredential,
+  GoogleAuthProvider,
+  signInWithPopup,
+} from "firebase/auth";
+import { auth } from "./config";
 
 // Note: We will expand these functions to include error handling.
 
@@ -24,4 +26,10 @@ export const login = (email: string, password: string): Promise<UserCredential> 
  */
 export const logout = (): Promise<void> => {
   return signOut(auth as Auth);
+};
+
+const googleProvider = new GoogleAuthProvider();
+
+export const signInWithGoogle = (): Promise<UserCredential> => {
+  return signInWithPopup(auth as Auth, googleProvider);
 };

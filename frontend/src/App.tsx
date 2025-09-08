@@ -6,6 +6,7 @@ import { logout } from './lib/firebase/auth';
 import { getProfile } from './api/profile';
 import { getItems, bulkImportItems, updateItem } from './api/items';
 import { getRooms } from './api/households';
+import { createUser } from './api/users';
 import type { Item, Room } from './types/api';
 import AuthPage from './components/auth/AuthPage';
 import HouseholdSetup from './components/household/HouseholdSetup';
@@ -122,6 +123,19 @@ function App() {
       setUser(currentUser);
       if (currentUser) {
         setLoading(true);
+        try {
+          await getProfile();
+        } catch (error) {
+          const axiosError = error as AxiosError;
+          if (axiosError.response && axiosError.response.status === 404) {
+            // If the user profile doesn't exist, create it
+            await createUser({
+              uid: currentUser.uid,
+              email: currentUser.email,
+              displayName: currentUser.displayName,
+            });
+          }
+        }
         await fetchProfile();
         setLoading(false);
       } else {
